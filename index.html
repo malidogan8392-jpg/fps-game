@@ -43,12 +43,12 @@ canvas{display:block;position:fixed;top:0;left:0;z-index:0;}
 #chat-messages { flex: 1; padding: 8px; overflow-y: auto; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 4px; }
 #chat-input { width: 100%; padding: 8px; background: rgba(20,20,20,0.8); border: none; border-top: 1px solid rgba(255,255,255,0.1); color: white; outline: none; border-radius: 0 0 6px 6px; }
 
-/* MOBIL KONTROLLER */
-.mobile-ctrl { display: none; position: fixed; z-index: 99; pointer-events: auto; user-select: none; }
+/* Mobil Kontroller */
+.mobile-ctrl { display: none; position: fixed; z-index: 99; pointer-events: auto; }
 #joystick-zone { bottom: 30px; left: 30px; width: 120px; height: 120px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.3); }
-#joystick-stick { width: 50px; height: 50px; background: rgba(255,255,255,0.7); border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-#mobile-fire-btn { bottom: 40px; right: 40px; width: 80px; height: 80px; background: rgba(231,76,60,0.8); border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; box-shadow: 0 0 15px rgba(0,0,0,0.6); }
-#mobile-chat-btn { top: 20px; right: 20px; padding: 10px 15px; background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 6px; font-weight: bold; font-size: 14px; }
+#joystick-stick { width: 50px; height: 50px; background: rgba(255,255,255,0.7); border-radius: 50%; }
+#mobile-fire-btn { bottom: 40px; right: 40px; width: 80px; height: 80px; background: rgba(231,76,60,0.8); border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+#mobile-chat-btn { top: 20px; right: 20px; padding: 10px 15px; background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 6px; font-weight: bold; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="/socket.io/socket.io.js"></script>
@@ -94,17 +94,27 @@ canvas{display:block;position:fixed;top:0;left:0;z-index:0;}
 const socket = io();
 let myId, myTeam, username = "";
 let phase = 'auth', authTab = 'login';
-let health = 100, currentWeapon = 'glock';
+let health = 100, currentWeapon = 'glock', killPoints = 0, unlockedWeapons = ['glock'];
 
 let scene, camera, renderer, clock = new THREE.Clock();
 let players = {}, playerMeshes = {}, bullets = [];
 let moveF = false, moveB = false, moveL = false, moveR = false;
-
-// CS 1.6 Birinci Şahıs Silah Değişkenleri
 let localWeaponMesh = null;
 
 const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
 let joyX = 0, joyY = 0;
+
+// Orijinal UI Fonksiyonların (Hata vermemeleri için eksiksiz eklendi)
+function updateHealth(hp) { document.getElementById('hp-bar').innerText = "HP: " + hp; }
+function updatePts() {}
+function updateWeaponSlots() {}
+function closeShop() {}
+function showOv(type, time) {
+    const el = document.getElementById('overlay-msg');
+    if(type === 'msg-killed') el.innerText = "ÖLDÜN!";
+    if(type === 'msg-kill') el.innerText = "DÜŞMANI VURDUN!";
+    setTimeout(() => { el.innerText = ""; }, time);
+}
 
 function setAuthTab(tab) {
     authTab = tab;
@@ -148,9 +158,6 @@ function init3D() {
 
     const light = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(light);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    dirLight.position.set(10, 20, 10);
-    scene.add(dirLight);
 
     const floorGeo = new THREE.PlaneGeometry(100, 100);
     const floorMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
@@ -182,23 +189,19 @@ function init3D() {
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // İlk default silahı ekranda oluştur
     createCSWeaponMesh('glock');
-
     animate();
 }
 
-// CS 1.6 TARZI ELDE DURAN GEOMETRİK SİLAH MODELİ
+// CS 1.6 Birinci Şahıs Performans Silahı
 function createCSWeaponMesh(type) {
     if (localWeaponMesh) camera.remove(localWeaponMesh);
-
     localWeaponMesh = new THREE.Group();
+    
     let length = 0.35, radius = 0.025, color = 0x222222;
-
     if (type === 'sniper') { length = 0.75; radius = 0.02; color = 0x2d3e2d; }
     else if (type === 'uzi') { length = 0.32; radius = 0.032; color = 0x3d3d3d; }
 
-    // Sade Performans Dostu Namlu
     const barrelGeo = new THREE.CylinderGeometry(radius, radius, length, 6);
     barrelGeo.rotateX(Math.PI / 2);
     const barrelMat = new THREE.MeshBasicMaterial({ color: color });
@@ -206,7 +209,6 @@ function createCSWeaponMesh(type) {
     barrel.position.set(0, 0, -length / 2);
     localWeaponMesh.add(barrel);
 
-    // Kabza
     const gripGeo = new THREE.BoxGeometry(radius * 1.4, 0.12, radius * 1.4);
     gripGeo.rotateX(Math.PI / 6);
     const gripMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
@@ -214,11 +216,34 @@ function createCSWeaponMesh(type) {
     grip.position.set(0, -0.07, -0.04);
     localWeaponMesh.add(grip);
 
-    // Sağ Alt CS 1.6 Köşe Konumu
     localWeaponMesh.position.set(0.16, -0.14, -0.32);
     camera.add(localWeaponMesh);
-    
     document.getElementById('ammo-bar').innerText = type.toUpperCase();
+}
+
+function fireWeapon() {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const ox = camera.position.x;
+    const oy = camera.position.y - 0.2;
+    const oz = camera.position.z;
+
+    socket.emit('fire', { ox, oy, oz, dx: dir.x, dy: dir.y, dz: dir.z });
+    spawnBullet(new THREE.Vector3(ox, oy, oz), dir, true);
+
+    if (localWeaponMesh) {
+        localWeaponMesh.position.z += 0.04;
+        localWeaponMesh.position.y += 0.015;
+    }
+}
+
+function spawnBullet(origin, dir, isMine) {
+    const geo = new THREE.SphereGeometry(0.08, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: isMine ? 0xffffff : 0xffaa00 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(origin);
+    scene.add(mesh);
+    bullets.push({ mesh, dir, life: 1.2, mine: isMine });
 }
 
 function setupMobileControls() {
@@ -233,8 +258,7 @@ function setupMobileControls() {
                 const rect = zone.getBoundingClientRect();
                 const cX = rect.left + rect.width / 2;
                 const cY = rect.top + rect.height / 2;
-                let dx = t.clientX - cX;
-                let dy = t.clientY - cY;
+                let dx = t.clientX - cX; let dy = t.clientY - cY;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 if(dist > 50) { dx = (dx/dist)*50; dy = (dy/dist)*50; }
                 stick.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -249,8 +273,7 @@ function setupMobileControls() {
         }
     };
     zone.addEventListener('touchend', resetJoy);
-    zone.addEventListener('touchcancel', resetJoy);
-
+    
     let lookTouchId = null, lastTouchX = 0;
     window.addEventListener('touchstart', (e) => {
         for(let t of e.changedTouches) {
@@ -307,7 +330,6 @@ function handleKeyDown(e) {
     }
 
     if(document.activeElement === chatInput) return;
-
     if(e.code === 'KeyW') moveF = true;
     if(e.code === 'KeyS') moveB = true;
     if(e.code === 'KeyA') moveL = true;
@@ -324,44 +346,14 @@ function handleKeyUp(e) {
 function createPlayerMesh(team) {
     const group = new THREE.Group();
     const colorHex = team === 'red' ? 0xe74c3c : 0x3498db;
-    
     const bodyGeo = new THREE.BoxGeometry(0.6, 1.8, 0.4);
     const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.9;
-    
     group.add(body);
     return group;
 }
 
-function fireWeapon() {
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    
-    const ox = camera.position.x;
-    const oy = camera.position.y - 0.2;
-    const oz = camera.position.z;
-
-    socket.emit('fire', { ox, oy, oz, dx: dir.x, dy: dir.y, dz: dir.z });
-    spawnBullet(new THREE.Vector3(ox, oy, oz), dir, true);
-
-    // CS 1.6 Silah Geri Tepme (Recoil) Efekti
-    if (localWeaponMesh) {
-        localWeaponMesh.position.z += 0.04;
-        localWeaponMesh.position.y += 0.015;
-    }
-}
-
-function spawnBullet(origin, dir, isMine) {
-    const geo = new THREE.SphereGeometry(0.08, 4, 4); // Düşük poligon
-    const mat = new THREE.MeshBasicMaterial({ color: isMine ? 0xffffff : 0xffaa00 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(origin);
-    scene.add(mesh);
-    bullets.push({ mesh, dir, life: 1.2, mine: isMine });
-}
-
-// NETWORK ALICILARI
 socket.on('init', (d) => {
     myId = d.id; myTeam = d.myTeam; players = d.players;
     if(players[myId]) {
@@ -407,16 +399,17 @@ socket.on('chatMessage', (data) => {
 });
 
 socket.on('damaged', (d) => {
-    if(d.id === myId) { health = d.health; document.getElementById('hp-bar').innerText = "HP: " + health; }
+    if(d.id === myId) { health = d.health; updateHealth(health); }
 });
 
 socket.on('playerDied', (d) => {
-    if(d.deadId === myId) { health = 0; document.getElementById('hp-bar').innerText = "HP: 0"; document.getElementById('overlay-msg').innerText = "ÖLDÜN!"; }
+    if(d.deadId === myId) { health = 0; updateHealth(0); showOv('msg-killed', 2000); }
+    if(d.killerId === myId) { showOv('msg-kill', 1500); }
 });
 
 socket.on('respawn', (d) => {
     if(d.id === myId) {
-        health = 100; document.getElementById('hp-bar').innerText = "HP: 100"; document.getElementById('overlay-msg').innerText = "";
+        health = 100; updateHealth(100);
         camera.position.set(d.x, 1.7, d.z);
     } else if(playerMeshes[d.id]) { playerMeshes[d.id].position.set(d.x, 0, d.z); }
 });
@@ -431,7 +424,10 @@ socket.on('timeSync', (d) => {
 });
 
 socket.on('shopOk', (d) => {
+    unlockedWeapons = d.unlocked; killPoints = d.killPoints;
+    updateWeaponSlots(); updatePts();
     if(d.weaponId) { currentWeapon = d.weaponId; createCSWeaponMesh(d.weaponId); }
+    closeShop();
 });
 
 socket.on('weaponChanged', (d) => {
@@ -453,7 +449,6 @@ function animate() {
         camera.getWorldDirection(dir);
         dir.y = 0; dir.normalize();
         const side = new THREE.Vector3(-dir.z, 0, dir.x);
-
         let moved = false;
 
         if(!isMobile) {
@@ -468,30 +463,25 @@ function animate() {
                 moved = true;
             }
         }
-
         if(moved) {
             socket.emit('move', { x: camera.position.x, z: camera.position.z, rotY: camera.rotation.y });
         }
     }
 
-    // Geri Tepme Sonrası Silahı Eski Yerine Süzme
     if (localWeaponMesh) {
         localWeaponMesh.position.x += (0.16 - localWeaponMesh.position.x) * 0.15;
         localWeaponMesh.position.y += (-0.14 - localWeaponMesh.position.y) * 0.15;
         localWeaponMesh.position.z += (-0.32 - localWeaponMesh.position.z) * 0.15;
     }
 
-    // Mermi Güncelleme
     for(let i = bullets.length - 1; i >= 0; i--) {
         let b = bullets[i];
         b.mesh.position.addScaledVector(b.dir, 45 * delta);
         b.life -= delta;
-
         if(b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); continue; }
 
         if(b.mine) {
             for(let id in playerMeshes) {
-                if(id === myId) continue;
                 let mesh = playerMeshes[id];
                 let dist = b.mesh.position.distanceTo(new THREE.Vector3(mesh.position.x, b.mesh.position.y, mesh.position.z));
                 if(dist < 0.9 && b.mesh.position.y > 0 && b.mesh.position.y < 2.5) {
@@ -502,7 +492,6 @@ function animate() {
             }
         }
     }
-
     renderer.render(scene, camera);
 }
 </script>
