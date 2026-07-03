@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,7 +18,7 @@ const ROUND_TIME   = 600;
 const END_WAIT     = 10;
 const VOTE_TIME    = 30;
 const BAN_DURATION = 7 * 24 * 3600 * 1000;
-const INACTIVE_MS  = 30 * 24 * 3600 * 1000;
+const INACTIVE_MS  = 90 * 24 * 3600 * 1000;
 const COLORS       = { red: '#e74c3c', blue: '#3498db' };
 
 const PROFANITY = [
@@ -25,260 +26,268 @@ const PROFANITY = [
   'sikerim','sikeyim','orosp','fuck','shit','bitch','asshole','cunt','nigger','bastard'
 ];
 
-// ── Silahlar ─────────────────────────────────────────────
+function filterText(text) {
+    let filtered = text;
+    PROFANITY.forEach(word => {
+        const regex = new RegExp(word, 'gi');
+        filtered = filtered.replace(regex, '***');
+    });
+    return filtered;
+}
+
 const WEAPONS = {
-  glock:   { name: 'Glock',   damage: 25,  cost: 0  },
-  uzi:     { name: 'Uzi',     damage: 12,  cost: 5  },
-  sniper:  { name: 'Sniper',  damage: 100, cost: 10 },
-  minigun: { name: 'Minigun', damage: 8,   cost: 20 }
+  glock:   { name: 'Glock',   damage: 34,  cost: 0  },
+  uzi:     { name: 'Uzi',     damage: 20,  cost: 5  },
+  sniper:  { name: 'Sniper',  damage: 100, cost: 15 }
 };
 
-// ── Haritalar ────────────────────────────────────────────
 const MAPS = {
-  arena: {
-    name: 'Arena', size: 24,
-    walls: [
-      {x:0,z:-12,w:24,d:1},{x:0,z:12,w:24,d:1},
-      {x:-12,z:0,w:1,d:24},{x:12,z:0,w:1,d:24},
-      {x:-5,z:-5,w:4,d:1},{x:5,z:5,w:4,d:1},
-      {x:-5,z:5,w:1,d:4},{x:5,z:-5,w:1,d:4},
-      {x:0,z:0,w:2,d:2}
-    ]
-  },
-  desert: {
-    name: 'Çöl', size: 48,
-    walls: [
-      {x:0,z:-24,w:48,d:1},{x:0,z:24,w:48,d:1},
-      {x:-24,z:0,w:1,d:48},{x:24,z:0,w:1,d:48},
-      {x:-10,z:-8,w:6,d:2},{x:10,z:8,w:6,d:2},
-      {x:-10,z:8,w:2,d:6},{x:10,z:-8,w:2,d:6},
-      {x:0,z:-10,w:3,d:3},{x:0,z:10,w:3,d:3},
-      {x:-16,z:-16,w:4,d:4},{x:16,z:16,w:4,d:4},
-      {x:-16,z:16,w:4,d:4},{x:16,z:-16,w:4,d:4},
-      {x:-6,z:0,w:2,d:8},{x:6,z:0,w:2,d:8}
-    ]
-  },
-  forest: {
-    name: 'Orman', size: 36,
-    walls: [
-      {x:0,z:-18,w:36,d:1},{x:0,z:18,w:36,d:1},
-      {x:-18,z:0,w:1,d:36},{x:18,z:0,w:1,d:36},
-      {x:-8,z:-8,w:1,d:1},{x:-4,z:-8,w:1,d:1},{x:0,z:-8,w:1,d:1},{x:4,z:-8,w:1,d:1},{x:8,z:-8,w:1,d:1},
-      {x:-8,z:8,w:1,d:1},{x:-4,z:8,w:1,d:1},{x:0,z:8,w:1,d:1},{x:4,z:8,w:1,d:1},{x:8,z:8,w:1,d:1},
-      {x:-8,z:0,w:1,d:1},{x:-4,z:4,w:1,d:1},{x:4,z:-4,w:1,d:1},{x:8,z:0,w:1,d:1},
-      {x:-12,z:-12,w:3,d:3},{x:12,z:12,w:3,d:3},
-      {x:-12,z:12,w:3,d:3},{x:12,z:-12,w:3,d:3},
-      {x:0,z:0,w:4,d:1},{x:0,z:0,w:1,d:4}
-    ]
-  }
+  dust2: { name: 'de_dust2', size: 60, walls: [] },
+  mirage: { name: 'de_mirage', size: 50, walls: [] }
 };
 
-// ── Hesaplar ─────────────────────────────────────────────
-const accounts = {};
-function hashPwd(p) { return crypto.createHash('sha256').update(p+':fps2024').digest('hex'); }
+let rooms = {};
+let accounts = {};
+
+try {
+    if (fs.existsSync('./accounts.json')) {
+        accounts = JSON.parse(fs.readFileSync('./accounts.json', 'utf8'));
+    }
+} catch(e) { console.log("Hesaplar yüklenemedi, sıfırdan başlanıyor."); }
+
+function saveAccounts() {
+    try { fs.writeFileSync('./accounts.json', JSON.stringify(accounts), 'utf8'); } catch(e){}
+}
+
+function getOrCreateRoom() {
+    for (let id in rooms) {
+        if (Object.keys(rooms[id].players).length < MAX_PLAYERS && rooms[id].phase !== 'end') {
+            return rooms[id];
+        }
+    }
+    const rid = 'room_' + Math.random().toString(36).substring(2, 9);
+    rooms[rid] = {
+        id: rid, name: 'Resmi Sunucu #' + Math.floor(Math.random()*900+100),
+        players: {}, teamKills: { red: 0, blue: 0 }, timeLeft: ROUND_TIME,
+        phase: 'play', currentMap: 'dust2', votes: {}, lastActive: Date.now()
+    };
+    return rooms[rid];
+}
+
 setInterval(() => {
-  const now = Date.now();
-  Object.keys(accounts).forEach(u => { if (now - accounts[u].lastLogin > INACTIVE_MS) delete accounts[u]; });
-}, 3600000);
+    for (let rid in rooms) {
+        let room = rooms[rid];
+        if (Object.keys(room.players).length === 0) {
+            if (Date.now() - room.lastActive > 60000) delete rooms[rid];
+            continue;
+        }
+        if (room.phase === 'play') {
+            room.timeLeft--;
+            if (room.timeLeft <= 0) {
+                room.phase = 'end'; room.timeLeft = END_WAIT;
+                io.to(rid).emit('phaseUpdate', { phase: 'end', timeLeft: END_WAIT, winner: room.teamKills.red > room.teamKills.blue ? 'red' : 'blue' });
+            }
+        } else if (room.phase === 'end') {
+            room.timeLeft--;
+            if (room.timeLeft <= 0) {
+                room.phase = 'vote'; room.timeLeft = VOTE_TIME; room.votes = {};
+                io.to(rid).emit('phaseUpdate', { phase: 'vote', timeLeft: VOTE_TIME });
+            }
+        } else if (room.phase === 'vote') {
+            room.timeLeft--;
+            if (room.timeLeft <= 0) {
+                let counts = { dust2: 0, mirage: 0 };
+                Object.values(room.votes).forEach(v => { if(counts[v]!==undefined) counts[v]++; });
+                room.currentMap = counts.dust2 >= counts.mirage ? 'dust2' : 'mirage';
+                room.phase = 'play'; room.timeLeft = ROUND_TIME;
+                room.teamKills = { red: 0, blue: 0 };
+                io.to(rid).emit('phaseUpdate', { phase: 'play', timeLeft: ROUND_TIME, currentMap: room.currentMap, mapData: MAPS[room.currentMap] });
+                Object.values(room.players).forEach(p => {
+                    p.health = 100; p.kills = 0; p.deaths = 0;
+                    const map = MAPS[room.currentMap]; const half = map.size/2-2;
+                    if(p.team==='red'){ p.x = -half+Math.random()*4; p.z = Math.random()*6-3; }
+                    else { p.x = half-Math.random()*4; p.z = Math.random()*6-3; }
+                });
+                io.to(rid).emit('initRound', { players: room.players });
+            }
+        }
+        io.to(rid).emit('timeSync', { timeLeft: room.timeLeft });
+    }
+}, 1000);
 
-// ── Odalar ───────────────────────────────────────────────
-const rooms = {};
-function makeRoom() {
-  const id = crypto.randomBytes(2).toString('hex').toUpperCase();
-  rooms[id] = { id, name:'Sunucu '+id, players:{}, phase:'voting', votes:{}, currentMap:'arena', teamKills:{red:0,blue:0}, timeLeft:VOTE_TIME, intervalId:null, lastActive:Date.now() };
-  startVoting(id);
-  return rooms[id];
-}
-function getRoomList() {
-  return Object.values(rooms).map(r => ({ id:r.id, name:r.name, count:Object.keys(r.players).length, max:MAX_PLAYERS, phase:r.phase, map:r.currentMap }));
-}
-function findOrCreate() {
-  return Object.values(rooms).find(r => Object.keys(r.players).length < MAX_PLAYERS && r.phase !== 'ending') || makeRoom();
-}
-
-// ── Tur döngüsü ──────────────────────────────────────────
-function startVoting(rid) {
-  const r = rooms[rid]; if (!r) return;
-  clearInterval(r.intervalId);
-  r.phase='voting'; r.votes={}; r.timeLeft=VOTE_TIME; r.teamKills={red:0,blue:0};
-  io.to(rid).emit('phaseChange',{phase:'voting',maps:Object.keys(MAPS).map(k=>({id:k,name:MAPS[k].name})),timeLeft:VOTE_TIME});
-  r.intervalId=setInterval(()=>{ r.timeLeft--; io.to(rid).emit('timerTick',r.timeLeft); if(r.timeLeft<=0) startRound(rid); },1000);
-}
-function startRound(rid) {
-  const r = rooms[rid]; if (!r) return;
-  clearInterval(r.intervalId);
-  const tally={}; Object.keys(MAPS).forEach(k=>tally[k]=0);
-  Object.values(r.votes).forEach(v=>{if(tally[v]!==undefined)tally[v]++;});
-  r.currentMap = Object.keys(tally).reduce((a,b)=>tally[a]>=tally[b]?a:b);
-  r.phase='playing'; r.timeLeft=ROUND_TIME; r.teamKills={red:0,blue:0};
-  const map=MAPS[r.currentMap]; const half=map.size/2-2;
-  Object.values(r.players).forEach(p=>{
-    if(p.team==='red'){p.x=-half+Math.random()*4;p.z=Math.random()*6-3;}
-    else{p.x=half-Math.random()*4;p.z=Math.random()*6-3;}
-    p.y=0; p.health=100;
-  });
-  io.to(rid).emit('phaseChange',{phase:'playing',map:r.currentMap,mapData:MAPS[r.currentMap],players:r.players,timeLeft:ROUND_TIME});
-  r.intervalId=setInterval(()=>{ r.timeLeft--; io.to(rid).emit('timerTick',r.timeLeft); if(r.timeLeft<=0) endRound(rid); },1000);
-}
-function endRound(rid) {
-  const r = rooms[rid]; if (!r) return;
-  clearInterval(r.intervalId);
-  r.phase='ending'; r.timeLeft=END_WAIT;
-  const winner = r.teamKills.red>r.teamKills.blue?'red':r.teamKills.blue>r.teamKills.red?'blue':'tie';
-  io.to(rid).emit('phaseChange',{phase:'ending',winner,teamKills:r.teamKills,timeLeft:END_WAIT});
-  r.intervalId=setInterval(()=>{ r.timeLeft--; io.to(rid).emit('timerTick',r.timeLeft); if(r.timeLeft<=0) startVoting(rid); },1000);
-}
-
-function containsProfanity(t) { const l=t.toLowerCase(); return PROFANITY.some(w=>l.includes(w)); }
-
-// ── Socket ───────────────────────────────────────────────
 io.on('connection', (socket) => {
-  let rid = null;
-  let username = null;
+    let currentRoomId = null;
 
-  socket.on('register', ({user,pwd}) => {
-    user=(user||'').trim();
-    if(!user||user.length<3||user.length>20){socket.emit('authErr','İsim 3-20 karakter olmalı');return;}
-    if(accounts[user]){socket.emit('authErr','Bu kullanıcı adı alınmış');return;}
-    accounts[user]={username:user,passwordHash:hashPwd(pwd),createdAt:Date.now(),lastLogin:Date.now(),warnings:0,bannedUntil:0};
-    username=user; socket.emit('authOk',{username:user});
-  });
+    socket.on('auth', (data) => {
+        const { type, username, password } = data;
+        if (!username || !password || username.length < 3 || password.length < 4) {
+            return socket.emit('authRes', { success: false, msg: 'Geçersiz kullanıcı adı veya şifre.' });
+        }
+        const hash = crypto.createHash('sha256').update(password).digest('hex');
 
-  socket.on('login', ({user,pwd}) => {
-    const a=accounts[user];
-    if(!a){socket.emit('authErr','Kullanıcı bulunamadı');return;}
-    if(a.passwordHash!==hashPwd(pwd)){socket.emit('authErr','Şifre yanlış');return;}
-    if(a.bannedUntil>Date.now()){socket.emit('authErr',`Banlısın. ${Math.ceil((a.bannedUntil-Date.now())/86400000)} gün kaldı.`);return;}
-    a.lastLogin=Date.now(); username=user; socket.emit('authOk',{username:user});
-  });
+        if (type === 'register') {
+            if (accounts[username]) return socket.emit('authRes', { success: false, msg: 'Bu kullanıcı adı zaten alınmış.' });
+            accounts[username] = { username, hash, killPoints: 0, unlocked: ['glock'], banUntil: 0, lastLogin: Date.now() };
+            saveAccounts();
+            socket.emit('authRes', { success: true, username, killPoints: 0, unlocked: ['glock'] });
+        } else {
+            if (!accounts[username] || accounts[username].hash !== hash) {
+                return socket.emit('authRes', { success: false, msg: 'Hatalı kullanıcı adı veya şifre.' });
+            }
+            if (accounts[username].banUntil > Date.now()) {
+                return socket.emit('authRes', { success: false, msg: 'Hesabınız yasaklanmıştır.' });
+            }
+            accounts[username].lastLogin = Date.now();
+            saveAccounts();
+            socket.emit('authRes', { success: true, username, killPoints: accounts[username].killPoints, unlocked: accounts[username].unlocked });
+        }
+    });
 
-  socket.on('getRooms', () => socket.emit('roomList', getRoomList()));
-  socket.on('quickJoin', () => enterRoom(findOrCreate()));
-  socket.on('joinRoom', (roomId) => {
-    const r=rooms[roomId];
-    if(!r){socket.emit('gameErr','Sunucu bulunamadı');return;}
-    if(Object.keys(r.players).length>=MAX_PLAYERS){socket.emit('gameErr','Sunucu dolu');return;}
-    enterRoom(r);
-  });
+    socket.on('joinGame', (data) => {
+        const { username } = data;
+        let room = getOrCreateRoom();
+        currentRoomId = room.id;
+        socket.join(currentRoomId);
+        room.lastActive = Date.now();
 
-  socket.on('vote', (mapId) => {
-    const r=rooms[rid]; if(!r||r.phase!=='voting'||!MAPS[mapId]) return;
-    r.votes[socket.id]=mapId;
-    const tally={}; Object.keys(MAPS).forEach(k=>tally[k]=0);
-    Object.values(r.votes).forEach(v=>{if(tally[v]!==undefined)tally[v]++;});
-    io.to(rid).emit('voteUpdate',tally);
-  });
+        const reds = Object.values(room.players).filter(p => p.team === 'red').length;
+        const blues = Object.values(room.players).filter(p => p.team === 'blue').length;
+        const team = reds <= blues ? 'red' : 'blue';
 
-  socket.on('buyWeapon', (weaponId) => {
-    const r=rooms[rid]; if(!r) return;
-    const p=r.players[socket.id]; if(!p) return;
-    const w=WEAPONS[weaponId]; if(!w) return;
-    if(p.unlocked&&p.unlocked.includes(weaponId)){socket.emit('shopMsg','Zaten sahipsin');return;}
-    if(p.killPoints<w.cost){socket.emit('shopMsg',`Yetersiz puan (${w.cost} gerekli)`);return;}
-    p.killPoints-=w.cost;
-    if(!p.unlocked) p.unlocked=[];
-    p.unlocked.push(weaponId);
-    socket.emit('shopOk',{weaponId,killPoints:p.killPoints,unlocked:p.unlocked});
-  });
+        const map = MAPS[room.currentMap]; const half = map.size/2-2;
+        let sx, sz;
+        if (team === 'red') { sx = -half + Math.random()*4; sz = Math.random()*6-3; }
+        else { sx = half - Math.random()*4; sz = Math.random()*6-3; }
 
-  socket.on('switchWeapon', (weaponId) => {
-    const r=rooms[rid]; if(!r) return;
-    const p=r.players[socket.id]; if(!p) return;
-    if(weaponId!=='glock'&&(!p.unlocked||!p.unlocked.includes(weaponId))) return;
-    p.weapon=weaponId;
-  });
+        const displayName = username || ('Oyuncu' + Math.floor(Math.random()*9000 + 1000));
+        
+        room.players[socket.id] = {
+            id: socket.id, username, name: displayName,
+            x: sx, y: 0, z: sz, rotY: 0, health: 100,
+            kills: 0, deaths: 0, killPoints: accounts[username] ? accounts[username].killPoints : 0,
+            weapon: 'glock', unlocked: accounts[username] ? accounts[username].unlocked : ['glock'],
+            team, color: COLORS[team]
+        };
 
-  socket.on('move', (data) => {
-    const r=rooms[rid]; if(!r||!r.players[socket.id]||r.phase!=='playing') return;
-    const p=r.players[socket.id];
-    p.x=data.x; p.y=data.y; p.z=data.z; p.rotY=data.rotY;
-    r.lastActive=Date.now();
-    socket.to(rid).emit('playerMoved',{id:socket.id,x:data.x,y:data.y,z:data.z,rotY:data.rotY});
-  });
+        socket.emit('init', {
+            id: socket.id, players: room.players, roomId: room.id, roomName: room.name,
+            phase: room.phase, currentMap: room.currentMap, mapData: MAPS[room.currentMap],
+            teamKills: room.teamKills, timeLeft: room.timeLeft, myTeam: team,
+            maps: Object.keys(MAPS).map(k => ({ id: k, name: MAPS[k].name })), weapons: WEAPONS
+        });
 
-  socket.on('shoot', (data) => {
-    if(rooms[rid]?.phase!=='playing') return;
-    socket.to(rid).emit('bulletFired',{id:socket.id,...data});
-  });
+        socket.to(currentRoomId).emit('playerJoined', room.players[socket.id]);
+    });
 
-  socket.on('hit', (data) => {
-    const r=rooms[rid]; if(!r||r.phase!=='playing') return;
-    const target=r.players[data.targetId];
-    const shooter=r.players[socket.id];
-    if(!target||!shooter||target.team===shooter.team) return;
-    const weapon=WEAPONS[shooter.weapon||'glock'];
-    target.health-=weapon.damage;
-    if(target.health<=0){
-      target.health=100;
-      target.deaths++;
-      shooter.kills++;
-      shooter.killPoints=(shooter.killPoints||0)+1;
-      r.teamKills[shooter.team]=(r.teamKills[shooter.team]||0)+1;
-      const map=MAPS[r.currentMap]; const half=map.size/2-2;
-      if(target.team==='red'){target.x=-half+Math.random()*4;target.z=Math.random()*6-3;}
-      else{target.x=half-Math.random()*4;target.z=Math.random()*6-3;}
-      io.to(rid).emit('playerDied',{deadId:data.targetId,killerId:socket.id});
-      io.to(rid).emit('teamKills',r.teamKills);
-      io.to(rid).emit('scoreUpdate',{id:data.targetId,kills:target.kills,deaths:target.deaths});
-      io.to(rid).emit('scoreUpdate',{id:socket.id,kills:shooter.kills,deaths:shooter.deaths,killPoints:shooter.killPoints});
-    } else {
-      io.to(data.targetId).emit('damaged',{health:target.health});
-    }
-  });
+    socket.on('chatMessage', (msg) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        const player = room.players[socket.id];
+        if (!player) return;
 
-  socket.on('chat', (msg) => {
-    if(!msg||typeof msg!=='string') return;
-    msg=msg.slice(0,120);
-    if(containsProfanity(msg)){
-      if(username&&accounts[username]){
-        accounts[username].warnings=(accounts[username].warnings||0)+1;
-        const w=accounts[username].warnings;
-        if(w>=4){accounts[username].bannedUntil=Date.now()+BAN_DURATION;socket.emit('banned','1 hafta banlandın');socket.disconnect();return;}
-        socket.emit('warning',`Uyarı ${w}/3`);
-      } return;
-    }
-    const r=rooms[rid]; if(!r) return;
-    const p=r.players[socket.id];
-    io.to(rid).emit('chatMsg',{name:p?.name||'?',team:p?.team,msg});
-  });
+        const cleanMessage = filterText(msg);
 
-  socket.on('disconnect', () => {
-    const r=rooms[rid]; if(!r) return;
-    delete r.players[socket.id];
-    io.to(rid).emit('playerLeft',socket.id);
-    io.emit('roomListUpdate',getRoomList());
-    if(Object.keys(r.players).length===0) r.lastActive=Date.now();
-  });
+        io.to(currentRoomId).emit('chatMessage', {
+            sender: player.name,
+            team: player.team,
+            color: player.color,
+            text: cleanMessage
+        });
+    });
 
-  function enterRoom(room) {
-    rid=room.id;
-    socket.join(room.id);
-    room.lastActive=Date.now();
-    const reds=Object.values(room.players).filter(p=>p.team==='red').length;
-    const blues=Object.values(room.players).filter(p=>p.team==='blue').length;
-    const team=reds<=blues?'red':'blue';
-    const map=MAPS[room.currentMap]; const half=map.size/2-2;
-    let sx,sz;
-    if(team==='red'){sx=-half+Math.random()*4;sz=Math.random()*6-3;}
-    else{sx=half-Math.random()*4;sz=Math.random()*6-3;}
-    const displayName=username||('Oyuncu'+Math.floor(Math.random()*9000+1000));
-    room.players[socket.id]={id:socket.id,username,name:displayName,x:sx,y:0,z:sz,rotY:0,health:100,kills:0,deaths:0,killPoints:0,weapon:'glock',unlocked:['glock'],team,color:COLORS[team]};
-    socket.emit('init',{id:socket.id,players:room.players,roomId:room.id,roomName:room.name,phase:room.phase,currentMap:room.currentMap,mapData:MAPS[room.currentMap],teamKills:room.teamKills,timeLeft:room.timeLeft,myTeam:team,maps:Object.keys(MAPS).map(k=>({id:k,name:MAPS[k].name})),weapons:WEAPONS});
-    socket.to(room.id).emit('playerJoined',room.players[socket.id]);
-    io.emit('roomListUpdate',getRoomList());
-  }
+    socket.on('move', (data) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        let p = rooms[currentRoomId].players[socket.id];
+        if (p && rooms[currentRoomId].phase === 'play') {
+            p.x = data.x; p.z = data.z; p.rotY = data.rotY;
+            socket.to(currentRoomId).emit('playerMoved', { id: socket.id, x: p.x, z: p.z, rotY: p.rotY });
+        }
+    });
+
+    socket.on('fire', (data) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        socket.to(currentRoomId).emit('bulletFired', data);
+    });
+
+    socket.on('hit', (data) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        let room = rooms[currentRoomId];
+        if (room.phase !== 'play') return;
+        let shooter = room.players[socket.id];
+        let target = room.players[data.targetId];
+
+        if (!shooter || !target || target.health <= 0 || shooter.team === target.team) return;
+
+        let dmg = WEAPONS[shooter.weapon] ? WEAPONS[shooter.weapon].damage : 20;
+        target.health -= dmg;
+
+        if (target.health <= 0) {
+            target.health = 0; target.deaths++; shooter.kills++;
+            room.teamKills[shooter.team]++;
+            io.to(currentRoomId).emit('teamKills', room.teamKills);
+
+            if (shooter.username && accounts[shooter.username]) {
+                accounts[shooter.username].killPoints += 2;
+                shooter.killPoints = accounts[shooter.username].killPoints;
+                saveAccounts();
+            }
+
+            io.to(currentRoomId).emit('playerDied', { deadId: target.id, killerId: shooter.id });
+            io.to(currentRoomId).emit('scoreUpdate', { id: shooter.id, kills: shooter.kills, deaths: shooter.deaths, killPoints: shooter.killPoints });
+            io.to(currentRoomId).emit('scoreUpdate', { id: target.id, kills: target.kills, deaths: target.deaths });
+
+            setTimeout(() => {
+                if (room.players[target.id]) {
+                    room.players[target.id].health = 100;
+                    const map = MAPS[room.currentMap]; const half = map.size/2-2;
+                    if(target.team==='red'){ target.x = -half+Math.random()*4; target.z = Math.random()*6-3; }
+                    else { target.x = half-Math.random()*4; target.z = Math.random()*6-3; }
+                    io.to(currentRoomId).emit('respawn', { id: target.id, x: target.x, z: target.z, health: 100 });
+                }
+            }, 3000);
+        } else {
+            io.to(currentRoomId).emit('damaged', { id: target.id, health: target.health });
+        }
+    });
+
+    socket.on('buyWeapon', (wid) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        let p = rooms[currentRoomId].players[socket.id];
+        if (!p || !p.username || !accounts[p.username] || !WEAPONS[wid]) return;
+        let user = accounts[p.username];
+        if (user.unlocked.includes(wid)) return;
+        if (user.killPoints >= WEAPONS[wid].cost) {
+            user.killPoints -= WEAPONS[wid].cost;
+            user.unlocked.push(wid); saveAccounts();
+            p.killPoints = user.killPoints; p.unlocked = user.unlocked;
+            socket.emit('shopOk', { unlocked: user.unlocked, killPoints: user.killPoints, weaponId: wid });
+        } else { socket.emit('shopMsg', 'Yetersiz Puan!'); }
+    });
+
+    socket.on('switchWeapon', (wid) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        let p = rooms[currentRoomId].players[socket.id];
+        if (p && p.unlocked.includes(wid)) {
+            p.weapon = wid;
+            socket.to(currentRoomId).emit('weaponChanged', { id: socket.id, weapon: wid });
+        }
+    });
+
+    socket.on('voteMap', (mid) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        let room = rooms[currentRoomId];
+        if (room.phase === 'vote') { room.votes[socket.id] = mid; }
+    });
+
+    socket.on('disconnect', () => {
+        if (currentRoomId && rooms[currentRoomId]) {
+            delete rooms[currentRoomId].players[socket.id];
+            io.to(currentRoomId).emit('playerLeft', socket.id);
+        }
+    });
 });
 
-setInterval(()=>{
-  const now=Date.now();
-  Object.keys(rooms).forEach(id=>{
-    const r=rooms[id];
-    if(Object.keys(r.players).length===0&&(now-r.lastActive)>60000){
-      clearInterval(r.intervalId); delete rooms[id];
-      io.emit('roomListUpdate',getRoomList());
-    }
-  });
-},15000);
-
-const PORT=process.env.PORT||3000;
-server.listen(PORT,()=>console.log('FPS: '+PORT));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu ${PORT} portunda tamamen hazır!`);
+});
