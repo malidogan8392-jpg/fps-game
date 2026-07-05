@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// 5 saniye sonra log dosyasını okuyup ekrana yazdırır
+// Süreyi 20 saniyeye çıkardık ki link kesinleşsin usta
 setTimeout(() => {
     const logPath = path.join(__dirname, 'tunellog.txt');
     if (fs.existsSync(logPath)) {
@@ -12,7 +12,7 @@ setTimeout(() => {
     } else {
         console.log("tunellog.txt henüz oluşturulmadı.");
     }
-}, 5000);
+}, 20000);
 
 
 
