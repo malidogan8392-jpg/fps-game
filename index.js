@@ -21,15 +21,11 @@ setTimeout(() => {
 
 
 
-const path = require('path');
-
 try {
-    // Bu komut dosya nerede olursa olsun ana klasördeki sunucu.js'i tam adresiyle bulur
     const absolutePath = path.resolve(__dirname, 'sunucu.js');
     require(absolutePath);
 } catch(e) {
     try {
-        // Eğer bulamazsa bir üst klasördeki sunucu.js'e tam adresiyle bakar
         const upperPath = path.resolve(__dirname, '../sunucu.js');
         require(upperPath);
     } catch(err) {
