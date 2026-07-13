@@ -1,8 +1,10 @@
+// Kodun en başındaki değişken tanımını bununla değiştir:
+const path = require('path');
+const ACCOUNTS_FILE = path.join(process.cwd(), 'hesaplar.json');
 const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 const crypto = require('crypto');
 const app = express();
 const server = http.createServer(app);
@@ -288,23 +290,28 @@ async function loadAccounts() {
   if (USE_GITHUB) {
     try { accounts = await githubReadAccounts(); console.log('Hesaplar GitHub\'dan yüklendi:', Object.keys(accounts).length); }
     catch (e) { console.error('GitHub\'dan hesap yüklenemedi, boş başlatılıyor:', e.message); accounts = {}; }
-  } else {
-   // Eski satırı sil ve bunu yapıştır:
+ // ... üstteki kodlar ...
+// 290. satırda catch bloğu bitiyor diyelim
+
+// BURAYI SİLİP ŞUNU YAPIŞTIR:
 try {
     if (fs.existsSync(ACCOUNTS_FILE)) {
         const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
         accounts = JSON.parse(fileContent);
     } else {
-        console.warn("Hesap dosyası bulunamadı, yeni bir tane oluşturuluyor.");
         accounts = {};
     }
 } catch (e) {
-    console.error('Kritik okuma hatası:', e);
+    console.error('Kritik okuma hatası:', e.message);
     accounts = {};
 }
-    catch (e) { console.error('Hesaplar okunamadı:', e.message); accounts = {}; }
-  }
-}
+
+// Hemen ardından burası gelsin:
+let saveTimer = null;
+let savePending = false;
+// ... kodun geri kalanı ...
+
+// Buradan sonra 308. satırdaki let saveTimer = null; ile devam et.
 
 let saveTimer = null;
 let savePending = false;
