@@ -19,31 +19,36 @@ setTimeout(() => {
 
 
 
+// Global alandaki fs çakışmalarını engellemek için geçici bir blok (scope) açıyoruz
+{
+    const fs = require('fs');
+    const olasiYollar = [
+        path.resolve(__dirname, 'sunucu.js'),
+        path.resolve(__dirname, 'Sunucu.js'),
+        path.resolve(__dirname, 'server.js'),
+        path.resolve(__dirname, '../sunucu.js'),
+        path.resolve(__dirname, '../Sunucu.js'),
+        path.resolve(__dirname, '../server.js')
+    ];
 
-// Olası bütün dosya isimlerini ve yollarını tek tek kontrol edip çalıştıran kod
-const olasiYollar = [
-    path.resolve(__dirname, 'sunucu.js'),
-    path.resolve(__dirname, 'Sunucu.js'),
-    path.resolve(__dirname, 'server.js'),
-    path.resolve(__dirname, '../sunucu.js'),
-    path.resolve(__dirname, '../Sunucu.js'),
-    path.resolve(__dirname, '../server.js')
-];
+    let dosyaBulundu = false;
 
-let dosyaBulundu = false;
+    // server.js'in içindeki mükerrer fs tanımları index.js'i çökertmesin diye koruma altına alıyoruz
+    global.fs = fs; 
 
-for (const yol of olasiYollar) {
-    if (fs.existsSync(yol)) {
-        try {
-            require(yol);
-            dosyaBulundu = true;
-            break; 
-        } catch (e) {
-            console.error("Dosya yüklenirken hata oluştu:", e);
+    for (const yol of olasiYollar) {
+        if (fs.existsSync(yol)) {
+            try {
+                require(yol);
+                dosyaBulundu = true;
+                break; 
+            } catch (e) {
+                console.error("Dosya yüklenirken hata oluştu:", e.message);
+            }
         }
     }
-}
 
-if (!dosyaBulundu) {
-    console.error("Usta, denediğim 6 farklı kombinasyonda da bu dosyayı bulamadım!");
+    if (!dosyaBulundu) {
+        console.error("Usta, denediğim 6 farklı kombinasyonda da bu dosyayı bulamadım!");
+    }
 }
