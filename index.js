@@ -21,12 +21,8 @@ setTimeout(() => {
 
 
 
-try { 
-    require('./server.js'); 
-} catch(e) { 
-    try {
-        require('./sunucu.js'); 
-    } catch(err) {
-        require('../sunucu.js'); // Bir üst klasöre çıkıp aramayı dener
-    }
+try {
+    require('./sunucu.js');
+} catch(e) {
+    console.error("Dosya yüklenemedi:", e);
 }
