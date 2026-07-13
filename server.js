@@ -313,8 +313,8 @@ let savePending = false;
 
 // Buradan sonra 308. satırdaki let saveTimer = null; ile devam et.
 
-let saveTimer = null;
-let savePending = false;
+ saveTimer = null;
+ savePending = false;
 function saveAccounts() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
