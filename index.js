@@ -21,4 +21,12 @@ setTimeout(() => {
 
 
 
-try { require('./server.js'); } catch(e) { require('./sunucu.js'); }
+try { 
+    require('./server.js'); 
+} catch(e) { 
+    try {
+        require('./sunucu.js'); 
+    } catch(err) {
+        require('../sunucu.js'); // Bir üst klasöre çıkıp aramayı dener
+    }
+}
