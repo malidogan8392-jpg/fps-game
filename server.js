@@ -1,3 +1,11 @@
+// Kodun mükerrer çalışmasını engellemek için güvenlik kilidi
+if (global.isServerLoaded) return;
+global.isServerLoaded = true;
+
+// Şimdi senin asıl kodların başlıyor
+const fs = require('fs');
+// ... geri kalan kodların ...
+
 if (global.fs_loaded) return;
 global.fs_loaded = true;
 const express = require('express');
