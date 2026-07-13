@@ -21,14 +21,16 @@ setTimeout(() => {
 
 
 
-try {
-    const absolutePath = path.resolve(__dirname, 'sunucu.js');
-    require(absolutePath);
-} catch(e) {
-    try {
-        const upperPath = path.resolve(__dirname, '../sunucu.js');
-        require(upperPath);
-    } catch(err) {
-        console.error("Maalesef iki konumda da sunucu.js bulunamadı usta:", err);
-    }
+const fs = require('fs');
+
+// Render'ın ana klasöründeki tam yolu bulalım
+const anaKlasorYolu = path.resolve('/opt/render/project/src/sunucu.js');
+const disKlasorYolu = path.resolve('/opt/render/project/sunucu.js');
+
+if (fs.existsSync(anaKlasorYolu)) {
+    require(anaKlasorYolu);
+} else if (fs.existsSync(disKlasorYolu)) {
+    require(disKlasorYolu);
+} else {
+    console.error("Usta, Render sunucusunda sunucu.js dosyasını hiçbir yerde bulamadım!");
 }
