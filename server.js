@@ -243,7 +243,7 @@ harbor: {
 // GITHUB_TOKEN ayarlıysa hesaplar GitHub deposundaki accounts.json'a kaydedilir
 // (yeniden deploy olsa bile kaybolmaz). Ayarlı değilse yerel dosyaya kaydedilir
 // (sadece sunucu uykuya dalıp uyanmasına dayanır, redeploy'da sıfırlanır).
-const ACCOUNTS_FILE   = path.join(__dirname, 'accounts.json');
+ ACCOUNTS_FILE   = path.join(__dirname, 'accounts.json');
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN || '';
 const GITHUB_REPO     = process.env.GITHUB_REPO || 'malidogan8392-jpg/fps-game';
 const GITHUB_BRANCH   = process.env.GITHUB_BRANCH || 'main';
@@ -296,7 +296,7 @@ async function loadAccounts() {
 // BURAYI SİLİP ŞUNU YAPIŞTIR:
 try {
     if (fs.existsSync(ACCOUNTS_FILE)) {
-        const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
+         fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
         accounts = JSON.parse(fileContent);
     } else {
         accounts = {};
