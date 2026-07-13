@@ -20,15 +20,30 @@ setTimeout(() => {
 
 
 
+// Olası bütün dosya isimlerini ve yollarını tek tek kontrol edip çalıştıran kod
+const olasiYollar = [
+    path.resolve(__dirname, 'sunucu.js'),
+    path.resolve(__dirname, 'Sunucu.js'),
+    path.resolve(__dirname, 'server.js'),
+    path.resolve(__dirname, '../sunucu.js'),
+    path.resolve(__dirname, '../Sunucu.js'),
+    path.resolve(__dirname, '../server.js')
+];
 
-// Render'ın ana klasöründeki tam yolu bulalım
-const anaKlasorYolu = path.resolve('/opt/render/project/src/sunucu.js');
-const disKlasorYolu = path.resolve('/opt/render/project/sunucu.js');
+let dosyaBulundu = false;
 
-if (fs.existsSync(anaKlasorYolu)) {
-    require(anaKlasorYolu);
-} else if (fs.existsSync(disKlasorYolu)) {
-    require(disKlasorYolu);
-} else {
-    console.error("Usta, Render sunucusunda sunucu.js dosyasını hiçbir yerde bulamadım!");
+for (const yol of olasiYollar) {
+    if (fs.existsSync(yol)) {
+        try {
+            require(yol);
+            dosyaBulundu = true;
+            break; 
+        } catch (e) {
+            console.error("Dosya yüklenirken hata oluştu:", e);
+        }
+    }
+}
+
+if (!dosyaBulundu) {
+    console.error("Usta, denediğim 6 farklı kombinasyonda da bu dosyayı bulamadım!");
 }
