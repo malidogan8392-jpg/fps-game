@@ -588,7 +588,6 @@ setInterval(()=>{
 const PORT=process.env.PORT||7860; // Hugging Face Spaces varsayılan portu 7860'tır
 server.listen(PORT,()=>console.log('FPS: '+PORT));
 
-
 const fs = require('fs');
 const path = require('path');
 
