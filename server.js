@@ -635,4 +635,4 @@ setInterval(() => {
 // SAKIN en sona process.exit(0) KOYMA! Oyun açık kalmalı.
 });
 
- }
+ 
