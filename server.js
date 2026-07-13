@@ -1,20 +1,9 @@
-// Kodun mükerrer çalışmasını engellemek için güvenlik kilidi
-if (global.isServerLoaded) return;
-global.isServerLoaded = true;
-
-// Şimdi senin asıl kodların başlıyor
 const fs = require('fs');
-// ... geri kalan kodların ...
-
-if (global.fs_loaded) return;
-global.fs_loaded = true;
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
-const fs = require('fs');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -597,7 +586,7 @@ setInterval(()=>{
 
 const PORT=process.env.PORT||7860; // Hugging Face Spaces varsayılan portu 7860'tır
 server.listen(PORT,()=>console.log('FPS: '+PORT));
-const fs = require('fs');
+
 const path = require('path');
 
 // Her 15 dakikada bir (15 * 60 * 1000 milisaniye) çalışacak arka plan görevi
