@@ -633,3 +633,4 @@ setInterval(() => {
     }
 }, 15 * 60 * 1000); 
 // SAKIN en sona process.exit(0) KOYMA! Oyun açık kalmalı.
+}
