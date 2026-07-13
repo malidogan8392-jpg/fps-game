@@ -587,8 +587,6 @@ setInterval(()=>{
 const PORT=process.env.PORT||7860; // Hugging Face Spaces varsayılan portu 7860'tır
 server.listen(PORT,()=>console.log('FPS: '+PORT));
 
-const path = require('path');
-
 // Her 15 dakikada bir (15 * 60 * 1000 milisaniye) çalışacak arka plan görevi
 setInterval(() => {
     try {
