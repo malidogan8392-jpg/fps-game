@@ -289,7 +289,19 @@ async function loadAccounts() {
     try { accounts = await githubReadAccounts(); console.log('Hesaplar GitHub\'dan yüklendi:', Object.keys(accounts).length); }
     catch (e) { console.error('GitHub\'dan hesap yüklenemedi, boş başlatılıyor:', e.message); accounts = {}; }
   } else {
-    try { if (fs.existsSync(ACCOUNTS_FILE)) accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8')); }
+   // Eski satırı sil ve bunu yapıştır:
+try {
+    if (fs.existsSync(ACCOUNTS_FILE)) {
+        const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
+        accounts = JSON.parse(fileContent);
+    } else {
+        console.warn("Hesap dosyası bulunamadı, yeni bir tane oluşturuluyor.");
+        accounts = {};
+    }
+} catch (e) {
+    console.error('Kritik okuma hatası:', e);
+    accounts = {};
+}
     catch (e) { console.error('Hesaplar okunamadı:', e.message); accounts = {}; }
   }
 }
