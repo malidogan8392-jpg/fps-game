@@ -22,5 +22,13 @@
     "lastLogin": 1783877145355,
     "warnings": 0,
     "bannedUntil": 0
+  },
+  "Han baba": {
+    "username": "Han baba",
+    "passwordHash": "849904500c0c50167ee997d5353e2380bedd7c1f11450b507e5f0b24870e278a",
+    "createdAt": 1783931000140,
+    "lastLogin": 1783931000140,
+    "warnings": 0,
+    "bannedUntil": 0
   }
 }
