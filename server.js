@@ -587,3 +587,35 @@ setInterval(()=>{
 
 const PORT=process.env.PORT||7860; // Hugging Face Spaces varsayılan portu 7860'tır
 server.listen(PORT,()=>console.log('FPS: '+PORT));
+
+
+const fs = require('fs');
+const path = require('path');
+
+// Her 15 dakikada bir (15 * 60 * 1000 milisaniye) çalışacak arka plan görevi
+setInterval(() => {
+    try {
+        console.log("=== ARKA PLAN GÖREVİ BAŞLADI ===");
+        
+        const dosyaYolu = path.join(__dirname, 'hesaplar.json');
+        
+        // 1. Dosyayı oku
+        const hamVeri = fs.readFileSync(dosyaYolu, 'utf8');
+        let hesaplar = JSON.parse(hamVeri);
+
+        console.log("Hesaplar kontrol ediliyor ve güncelleniyor...");
+        
+        // -------------------------------------------------------------
+        // BURAYA YAPMAK İSTEDİĞİN İŞLEMİ YAZ
+        // Örnek: Süresi biten odaları veya hesapları temizle/güncelle
+        // -------------------------------------------------------------
+
+        // 2. Güncellenmiş veriyi dosyaya geri yaz
+        fs.writeFileSync(dosyaYolu, JSON.stringify(hesaplar, null, 2));
+        console.log("=== ARKA PLAN GÖREVİ BAŞARIYLA BİTTİ (Oyun açık kalmaya devam ediyor) ===");
+
+    } catch (error) {
+        console.error("Arka plan görevi çalışırken hata oluştu:", error);
+    }
+}, 15 * 60 * 1000); 
+// SAKIN en sona process.exit(0) KOYMA! Oyun açık kalmalı.
