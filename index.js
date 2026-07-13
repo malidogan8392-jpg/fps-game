@@ -21,8 +21,6 @@ setTimeout(() => {
 
 
 
-const fs = require('fs');
-
 // Render'ın ana klasöründeki tam yolu bulalım
 const anaKlasorYolu = path.resolve('/opt/render/project/src/sunucu.js');
 const disKlasorYolu = path.resolve('/opt/render/project/sunucu.js');
