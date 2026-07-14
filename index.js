@@ -7,7 +7,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Dosyaları doğrudan ana dizinden (root) tarayıcıya sunar
+// HTML ve istemci dosyalarını doğrudan ana dizinden sunar
 app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
     }
 });
 
-// Gecikme önleyici ve tünel uyumlu Socket.io ayarları
+// Performans ve tünel uyumlu Socket.io ayarları
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -29,27 +29,27 @@ const io = new Server(server, {
     perMessageDeflate: false 
 });
 
-// Çökme Korumaları
-process.on('uncaughtException', (err) => console.error('❌ Hata:', err.message));
+// Sunucu Korumaları (Çökmeyi Engeller)
+process.on('uncaughtException', (err) => console.error('❌ Kritik Hata:', err.message));
 process.on('unhandledRejection', (err) => console.error('❌ Promise Hatası:', err.message));
 
 // Portu dinle
 const PORT = process.env.PORT || 7860;
 server.listen(PORT, () => {
     console.log('====================================');
-    console.log(`🚀 SUNUCU AKTİF! Port: ${PORT}`);
+    console.log(`🚀 FPS SUNUCUSU AKTİF! Port: ${PORT}`);
     console.log('====================================');
 });
 
-// Oyun motorunu (server.js) ayağa kaldır ve soketi aktar
+// Oyun motorunu (server.js) soket nesnesiyle birlikte ayağa kaldır
 try {
     require('./server.js')(io);
-    console.log('✅ server.js oyun motoru index.js\'e başarıyla bağlandı.');
+    console.log('✅ server.js oyun motoru başarıyla bağlandı.');
 } catch (error) {
     console.error('❌ server.js yüklenirken kritik hata:', error.message);
 }
 
-// Bulunduğun platformdaki tünel loglarını ekrana basan kısmın (Dokunmadık, aynen çalışır)
+// Bulunduğun platformdaki tünel loglarını ekrana basan kısım (Dokunmadık)
 setTimeout(() => {
     const logPath = path.join(__dirname, 'tunellog.txt');
     if (fs.existsSync(logPath)) {
@@ -57,5 +57,7 @@ setTimeout(() => {
         console.log("=== CLOUDFLARE TÜNEL LOGLARI ===");
         console.log(logContent);
         console.log("=================================");
+    } else {
+        console.log("tunellog.txt henüz oluşturulmadı.");
     }
 }, 20000);
