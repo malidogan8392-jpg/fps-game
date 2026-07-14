@@ -276,4 +276,92 @@ io.on('connection', (socket) => {
                     thrower.kills++; thrower.killPoints=(thrower.killPoints||0)+1;
                     r.teamKills[thrower.team]=(r.teamKills[thrower.team]||0)+1;
                     const map=MAPS[r.currentMap]; const half=(map.sizeX||map.size)/2-2;
-                    if(target.team==='red'){target.x=-half+Math.random()*4;target.z=Math.random()*6
+                    if(target.team==='red'){target.x=-half+Math.random()*4;target.z=Math.random()*6-3;}
+                    else{target.x=half-Math.random()*4;target.z=Math.random()*6-3;}
+                    io.to(rid).emit('playerDied',{deadId:pid,killerId:socket.id});
+                    io.to(rid).emit('teamKills',r.teamKills);
+                    io.to(rid).emit('scoreUpdate',{id:pid,kills:target.kills,deaths:target.deaths});
+                    io.to(rid).emit('scoreUpdate',{id:socket.id,kills:thrower.kills,deaths:thrower.deaths,killPoints:thrower.killPoints});
+                } else {
+                    io.to(pid).emit('damaged',{health:target.health});
+                }
+            }
+        });
+    });
+
+    socket.on('chat', (msg) => {
+        if(!msg||typeof msg!=='string') return;
+        msg=msg.slice(0,120);
+        if(containsProfanity(msg)){
+            if(username&&accounts[username]){
+                accounts[username].warnings=(accounts[username].warnings||0)+1;
+                const w=accounts[username].warnings;
+                if(w>=4){accounts[username].bannedUntil=Date.now()+BAN_DURATION;saveAccounts();socket.emit('banned','1 hafta banlandın');socket.disconnect();return;}
+                saveAccounts();
+                socket.emit('warning',`Uyarı ${w}/3`);
+            } return;
+        }
+        const r=rooms[rid]; if(!r) return;
+        const p=r.players[socket.id];
+        io.to(rid).emit('chatMsg',{name:p?.name||'?',team:p?.team,msg});
+    });
+
+    socket.on('disconnect', () => {
+        const r=rooms[rid]; if(!r) return;
+        delete r.players[socket.id];
+        io.to(rid).emit('playerLeft',socket.id);
+        io.emit('roomListUpdate',getRoomList());
+        if(Object.keys(r.players).length===0) r.lastActive=Date.now();
+    });
+
+    function enterRoom(room) {
+        rid=room.id;
+        socket.join(room.id);
+        room.lastActive=Date.now();
+        if(username&&accounts[username]){accounts[username].lastLogin=Date.now();} 
+        const reds=Object.values(room.players).filter(p=>p.team==='red').length;
+        const blues=Object.values(room.players).filter(p=>p.team==='blue').length;
+        const team=reds<=blues?'red':'blue';
+        const map=MAPS[room.currentMap]; const half=(map.sizeX||map.size)/2-2;
+        let sx,sz;
+        if(team==='red'){sx=-half+Math.random()*4;sz=Math.random()*6-3;}
+        else{sx=half-Math.random()*4;sz=Math.random()*6-3;}
+        const displayName=username||('Oyuncu'+Math.floor(Math.random()*9000+1000));
+        room.players[socket.id]={id:socket.id,username,name:displayName,x:sx,y:0,z:sz,rotY:0,health:100,kills:0,deaths:0,killPoints:0,weapon:'glock',unlocked:['glock'],character:'soldier',unlockedChars:['soldier'],team,color:COLORS[team]};
+        socket.emit('init',{id:socket.id,players:room.players,roomId:room.id,roomName:room.name,phase:room.phase,currentMap:room.currentMap,mapData:MAPS[room.currentMap],teamKills:room.teamKills,timeLeft:room.timeLeft,myTeam:team,maps:Object.keys(MAPS).map(k=>({id:k,name:MAPS[k].name})),weapons:WEAPONS,characters:CHARACTERS});
+        socket.to(room.id).emit('playerJoined',room.players[socket.id]);
+        io.emit('roomListUpdate',getRoomList());
+    }
+});
+
+// ── Sunucu Rutinleri ve Başlatma ─────────────────────────
+setInterval(()=>{
+    const now=Date.now();
+    Object.keys(rooms).forEach(id=>{
+        const r=rooms[id];
+        if(Object.keys(r.players).length===0&&(now-r.lastActive)>60000){
+            clearInterval(r.intervalId); delete rooms[id];
+            io.emit('roomListUpdate',getRoomList());
+        }
+    });
+},15000);
+
+const PORT = process.env.PORT || 7860;
+server.listen(PORT, () => console.log('FPS Sunucu Aktif Port: ' + PORT));
+
+// 15 dakikalık arka plan görevi (Sorunsuz kapanış)
+setInterval(() => {
+    try {
+        console.log("=== ARKA PLAN GÖREVİ BAŞLADI ===");
+        const dosyaYolu = path.join(__dirname, 'hesaplar.json');
+        if (fs.existsSync(dosyaYolu)) {
+            const hamVeri = fs.readFileSync(dosyaYolu, 'utf8');
+            let hesaplar = JSON.parse(hamVeri);
+            console.log("Hesaplar kontrol ediliyor...");
+            fs.writeFileSync(dosyaYolu, JSON.stringify(hesaplar, null, 2));
+        }
+        console.log("=== ARKA PLAN GÖREVİ BAŞARIYLA BİTTİ ===");
+    } catch (error) {
+        console.error("Arka plan görevi çalışırken hata oluştu:", error);
+    }
+}, 15 * 60 * 1000);
