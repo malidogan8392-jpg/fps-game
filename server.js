@@ -6,13 +6,19 @@ const ACCOUNTS_FILE = path.join(process.cwd(), 'hesaplar.json');
 
 module.exports = function(io) {
     let accounts = {};
+    
+    // Hesapları güvenli yükleme
     try {
         if (fs.existsSync(ACCOUNTS_FILE)) {
             const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
-            accounts = JSON.parse(fileContent);
+            if (fileContent.trim()) {
+                accounts = JSON.parse(fileContent);
+                console.log(`💾 Toplam ${Object.keys(accounts).length} kayıtlı hesap başarıyla yüklendi.`);
+            }
         }
     } catch (e) {
-        console.error('Hesap okuma hatası:', e.message);
+        console.error('❌ Hesaplar dosyası okunurken hata oluştu, sıfırlandı:', e.message);
+        accounts = {};
     }
 
     let saveTimer = null;
@@ -21,13 +27,18 @@ module.exports = function(io) {
         saveTimer = setTimeout(() => {
             try { 
                 fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2)); 
+                console.log("💾 Hesaplar dosyasına yazıldı.");
             } catch (e) { 
-                console.error('Hesaplar kaydedilemedi:', e.message); 
+                console.error('❌ Hesaplar kaydedilemedi:', e.message); 
             }
         }, 1500);
     }
 
-    function hashPwd(p) { return crypto.createHash('sha256').update(p+':fps2024').digest('hex'); }
+    // Geliştirilmiş ve güvenceye alınmış şifre hash fonksiyonu
+    function hashPwd(p) { 
+        const cleanPassword = String(p || '');
+        return crypto.createHash('sha256').update(cleanPassword + ':fps2024').digest('hex'); 
+    }
 
     const rooms = {};
     const MATCH_TIME = 600; // 10 Dakika
@@ -94,21 +105,51 @@ module.exports = function(io) {
         let rid = null;
         let username = null;
 
-        socket.on('register', ({user,pwd}) => {
-            user=(user||'').trim();
-            if(!user||user.length<3||user.length>20){socket.emit('authErr','İsim 3-20 karakter olmalı');return;}
-            if(accounts[user]){socket.emit('authErr','Bu kullanıcı adı alınmış');return;}
-            accounts[user]={username:user,passwordHash:hashPwd(pwd),createdAt:Date.now(),lastLogin:Date.now()};
+        socket.on('register', ({user, pwd}) => {
+            user = String(user || '').trim();
+            const lowUser = user.toLowerCase();
+            
+            if(!user || user.length < 3 || user.length > 20){
+                socket.emit('authErr', 'İsim 3-20 karakter olmalı');
+                return;
+            }
+            if(accounts[lowUser]){
+                socket.emit('authErr', 'Bu kullanıcı adı alınmış');
+                return;
+            }
+            
+            // Kayıt ederken hem orijinal ismi hem de küçük harf versiyonunu tutuyoruz
+            accounts[lowUser] = {
+                username: user, 
+                passwordHash: hashPwd(pwd), 
+                createdAt: Date.now(), 
+                lastLogin: Date.now()
+            };
             saveAccounts();
-            username=user; socket.emit('authOk',{username:user});
+            username = user; 
+            socket.emit('authOk', { username: user });
         });
 
-        socket.on('login', ({user,pwd}) => {
-            const a=accounts[user];
-            if(!a){socket.emit('authErr','Kullanıcı bulunamadı');return;}
-            if(a.passwordHash!==hashPwd(pwd)){socket.emit('authErr','Şifre yanlış');return;}
-            a.lastLogin=Date.now(); saveAccounts();
-            username=user; socket.emit('authOk',{username:user});
+        socket.on('login', ({user, pwd}) => {
+            user = String(user || '').trim();
+            const lowUser = user.toLowerCase();
+            const a = accounts[lowUser];
+            
+            if(!a){
+                socket.emit('authErr', 'Kullanıcı bulunamadı');
+                return;
+            }
+            
+            const clientHash = hashPwd(pwd);
+            if(a.passwordHash !== clientHash){
+                socket.emit('authErr', 'Şifre yanlış');
+                return;
+            }
+            
+            a.lastLogin = Date.now(); 
+            saveAccounts();
+            username = a.username; // Kayıtlı olan orijinal büyük/küçük harfli ismi alıyoruz
+            socket.emit('authOk', { username: username });
         });
 
         socket.on('getRooms', () => socket.emit('roomList', getRoomList()));
@@ -201,8 +242,4 @@ module.exports = function(io) {
             }
         });
     },15000);
-
-    setInterval(() => {
-        try { saveAccounts(); } catch (error) { console.error("Kayıt hatası:", error); }
-    }, 15 * 60 * 1000);
 };
