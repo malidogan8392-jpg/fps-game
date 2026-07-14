@@ -5,9 +5,8 @@ const crypto = require('crypto');
 const ACCOUNTS_FILE = path.join(process.cwd(), 'hesaplar.json');
 
 module.exports = function(io) {
+    // ── Hesap Yönetimi ───────────────────────────────────────
     let accounts = {};
-    
-    // Hesapları güvenli yükleme
     try {
         if (fs.existsSync(ACCOUNTS_FILE)) {
             const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
@@ -17,31 +16,25 @@ module.exports = function(io) {
             }
         }
     } catch (e) {
-        console.error('❌ Hesaplar dosyası okunurken hata oluştu, sıfırlandı:', e.message);
+        console.error('Hesap okuma hatası:', e.message);
         accounts = {};
     }
 
-    let saveTimer = null;
+    // İstediğin gibi ANINDA ve gecikmesiz kaydeden fonksiyon
     function saveAccounts() {
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            try { 
-                fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2)); 
-                console.log("💾 Hesaplar dosyasına yazıldı.");
-            } catch (e) { 
-                console.error('❌ Hesaplar kaydedilemedi:', e.message); 
-            }
-        }, 1500);
+        try { 
+            fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2)); 
+            console.log("💾 Hesaplar dosyası ANINDA güncellendi ve kaydedildi.");
+        } catch (e) { 
+            console.error('❌ Hesaplar kaydedilemedi:', e.message); 
+        }
     }
 
-    // Geliştirilmiş ve güvenceye alınmış şifre hash fonksiyonu
-    function hashPwd(p) { 
-        const cleanPassword = String(p || '');
-        return crypto.createHash('sha256').update(cleanPassword + ':fps2024').digest('hex'); 
-    }
+    function hashPwd(p) { return crypto.createHash('sha256').update(String(p || '') + ':fps2024').digest('hex'); }
 
+    // ── Odalar ve Sabitler (10 Dakikalık Tek Maç Modu) ────────
     const rooms = {};
-    const MATCH_TIME = 600; // 10 Dakika
+    const MATCH_TIME = 600; 
     const MAX_PLAYERS = 10;
     const MAPS = { arena: { name: 'Arena', size: 30 } };
     const COLORS = { red: '#ff0000', blue: '#0000ff' };
@@ -101,6 +94,7 @@ module.exports = function(io) {
         }, 5000);
     }
 
+    // ── Socket İşlemleri ────────────────────────────────────
     io.on('connection', (socket) => {
         let rid = null;
         let username = null;
@@ -118,13 +112,7 @@ module.exports = function(io) {
                 return;
             }
             
-            // Kayıt ederken hem orijinal ismi hem de küçük harf versiyonunu tutuyoruz
-            accounts[lowUser] = {
-                username: user, 
-                passwordHash: hashPwd(pwd), 
-                createdAt: Date.now(), 
-                lastLogin: Date.now()
-            };
+            accounts[lowUser] = { username: user, passwordHash: hashPwd(pwd), createdAt: Date.now(), lastLogin: Date.now() };
             saveAccounts();
             username = user; 
             socket.emit('authOk', { username: user });
@@ -139,16 +127,14 @@ module.exports = function(io) {
                 socket.emit('authErr', 'Kullanıcı bulunamadı');
                 return;
             }
-            
-            const clientHash = hashPwd(pwd);
-            if(a.passwordHash !== clientHash){
+            if(a.passwordHash !== hashPwd(pwd)){
                 socket.emit('authErr', 'Şifre yanlış');
                 return;
             }
             
             a.lastLogin = Date.now(); 
             saveAccounts();
-            username = a.username; // Kayıtlı olan orijinal büyük/küçük harfli ismi alıyoruz
+            username = a.username; 
             socket.emit('authOk', { username: username });
         });
 
@@ -156,16 +142,17 @@ module.exports = function(io) {
         socket.on('quickJoin', () => enterRoom(findOrCreate()));
         
         socket.on('joinRoom', (roomId) => {
-            const r=rooms[roomId];
+            const r = rooms[roomId];
             if(!r){socket.emit('gameErr','Sunucu bulunamadı');return;}
             if(Object.keys(r.players).length>=MAX_PLAYERS){socket.emit('gameErr','Sunucu dolu');return;}
             enterRoom(r);
         });
 
         socket.on('move', (data) => {
-            const r=rooms[rid]; if(!r||!r.players[socket.id]||r.phase!=='playing') return;
-            const p=r.players[socket.id];
+            const r = rooms[rid]; if(!r||!r.players[socket.id]||r.phase!=='playing') return;
+            const p = r.players[socket.id];
             p.x=data.x; p.y=data.y; p.z=data.z; p.rotY=data.rotY;
+            r.lastActive=Date.now();
             socket.to(rid).volatile.emit('playerMoved',{id:socket.id,x:data.x,y:data.y,z:data.z,rotY:data.rotY});
         });
 
@@ -175,19 +162,19 @@ module.exports = function(io) {
         });
 
         socket.on('hit', (data) => {
-            const r=rooms[rid]; if(!r||r.phase!=='playing') return;
-            const target=r.players[data.targetId];
-            const shooter=r.players[socket.id];
+            const r = rooms[rid]; if(!r||r.phase!=='playing') return;
+            const target = r.players[data.targetId];
+            const shooter = r.players[socket.id];
             if(!target||!shooter||target.team===shooter.team) return;
             
-            const weapon=WEAPONS[shooter.weapon||'glock'];
+            const weapon = WEAPONS[shooter.weapon||'glock'];
             target.health-=weapon.damage;
             
             if(target.health<=0){
                 target.health=100; target.deaths++; shooter.kills++;
                 r.teamKills[shooter.team]=(r.teamKills[shooter.team]||0)+1;
                 
-                const map=MAPS[r.currentMap]; const half=(map.sizeX||map.size)/2-2;
+                const map = MAPS[r.currentMap]; const half = (map.sizeX||map.size)/2-2;
                 if(target.team==='red'){target.x=-half+Math.random()*4;target.z=Math.random()*6-3;}
                 else{target.x=half-Math.random()*4;target.z=Math.random()*6-3;}
                 
@@ -201,7 +188,7 @@ module.exports = function(io) {
         });
 
         socket.on('disconnect', () => {
-            const r=rooms[rid]; if (!r) return;
+            const r = rooms[rid]; if (!r) return;
             delete r.players[socket.id];
             io.to(rid).emit('playerLeft',socket.id);
             io.emit('roomListUpdate',getRoomList());
@@ -209,21 +196,17 @@ module.exports = function(io) {
         });
 
         function enterRoom(room) {
-            rid=room.id;
-            socket.join(room.id);
-            room.lastActive=Date.now();
-            
+            rid=room.id; socket.join(room.id); room.lastActive=Date.now();
             const reds=Object.values(room.players).filter(p=>p.team==='red').length;
             const blues=Object.values(room.players).filter(p=>p.team==='blue').length;
             const team=reds<=blues?'red':'blue';
             
-            const map=MAPS[room.currentMap]; const half=(map.sizeX||map.size)/2-2;
+            const map = MAPS[room.currentMap]; const half = (map.sizeX||map.size)/2-2;
             let sx,sz;
             if(team==='red'){sx=-half+Math.random()*4;sz=Math.random()*6-3;}
             else{sx=half-Math.random()*4;sz=Math.random()*6-3;}
             
             const displayName=username||('Oyuncu'+Math.floor(Math.random()*9000+1000));
-            
             room.players[socket.id]={id:socket.id,username,name:displayName,x:sx,y:0,z:sz,rotY:0,health:100,kills:0,deaths:0,weapon:'glock',character:'soldier',team,color:COLORS[team]};
             
             socket.emit('init',{id:socket.id,players:room.players,roomId:room.id,roomName:room.name,phase:room.phase,currentMap:room.currentMap,mapData:MAPS[room.currentMap],teamKills:room.teamKills,timeLeft:room.timeLeft,myTeam:team,maps:Object.keys(MAPS).map(k=>({id:k,name:MAPS[k].name})),weapons:WEAPONS,characters:CHARACTERS});
@@ -235,7 +218,7 @@ module.exports = function(io) {
     setInterval(()=>{
         const now=Date.now();
         Object.keys(rooms).forEach(id=>{
-            const r=rooms[id];
+            const r = rooms[id];
             if(Object.keys(r.players).length===0&&(now-r.lastActive)>60000){
                 clearInterval(r.intervalId); delete rooms[id];
                 io.emit('roomListUpdate',getRoomList());
