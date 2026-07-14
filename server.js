@@ -5,18 +5,14 @@ const crypto = require('crypto');
 const ACCOUNTS_FILE = path.join(process.cwd(), 'hesaplar.json');
 
 module.exports = function(io) {
-    // ── Hesap Yönetimi ───────────────────────────────────────
     let accounts = {};
     try {
         if (fs.existsSync(ACCOUNTS_FILE)) {
             const fileContent = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
             accounts = JSON.parse(fileContent);
-        } else {
-            accounts = {};
         }
     } catch (e) {
         console.error('Hesap okuma hatası:', e.message);
-        accounts = {};
     }
 
     let saveTimer = null;
@@ -33,9 +29,8 @@ module.exports = function(io) {
 
     function hashPwd(p) { return crypto.createHash('sha256').update(p+':fps2024').digest('hex'); }
 
-    // ── Odalar ve Sabitler (10 Dakikalık Tek Maç Modu) ────────
     const rooms = {};
-    const MATCH_TIME = 600; // 10 Dakika = 600 Saniye
+    const MATCH_TIME = 600; // 10 Dakika
     const MAX_PLAYERS = 10;
     const MAPS = { arena: { name: 'Arena', size: 30 } };
     const COLORS = { red: '#ff0000', blue: '#0000ff' };
@@ -44,17 +39,7 @@ module.exports = function(io) {
 
     function makeRoom() {
         const id = crypto.randomBytes(2).toString('hex').toUpperCase();
-        rooms[id] = { 
-            id, 
-            name: 'Sunucu ' + id, 
-            players: {}, 
-            phase: 'playing', // Doğrudan oyun aşamasında başlar
-            currentMap: 'arena', 
-            teamKills: { red: 0, blue: 0 }, 
-            timeLeft: MATCH_TIME, 
-            intervalId: null, 
-            lastActive: Date.now() 
-        };
+        rooms[id] = { id, name: 'Sunucu ' + id, players: {}, phase: 'playing', currentMap: 'arena', teamKills: { red: 0, blue: 0 }, timeLeft: MATCH_TIME, intervalId: null, lastActive: Date.now() };
         startMatch(id);
         return rooms[id];
     }
@@ -67,7 +52,6 @@ module.exports = function(io) {
         return Object.values(rooms).find(r => Object.keys(r.players).length < MAX_PLAYERS) || makeRoom();
     }
 
-    // ── Kesintisiz Maç Döngüsü ────────────────────────────────
     function startMatch(rid) {
         const r = rooms[rid]; if (!r) return;
         clearInterval(r.intervalId);
@@ -76,7 +60,6 @@ module.exports = function(io) {
         r.timeLeft = MATCH_TIME;
         r.teamKills = { red: 0, blue: 0 };
         
-        // Herkesin skorunu sıfırla ve yeniden doğdur
         const map = MAPS[r.currentMap]; const half = (map.sizeX || map.size) / 2 - 2;
         Object.values(r.players).forEach(p => {
             p.kills = 0; p.deaths = 0; p.health = 100;
@@ -89,10 +72,7 @@ module.exports = function(io) {
         r.intervalId = setInterval(() => {
             r.timeLeft--;
             io.to(rid).emit('timerTick', r.timeLeft);
-            
-            if (r.timeLeft <= 0) {
-                endMatch(rid);
-            }
+            if (r.timeLeft <= 0) endMatch(rid);
         }, 1000);
     }
 
@@ -103,16 +83,13 @@ module.exports = function(io) {
         r.phase = 'ending';
         const winner = r.teamKills.red > r.teamKills.blue ? 'red' : r.teamKills.blue > r.teamKills.red ? 'blue' : 'tie';
         
-        // Kazananı duyur (Arayüzde 5 saniye sonuçlar gösterilir)
         io.to(rid).emit('phaseChange', { phase: 'ending', winner, teamKills: r.teamKills, timeLeft: 5 });
         
-        // 5 saniye sonra yeni 10 dakikalık maçı otomatik başlat
         setTimeout(() => {
             if (rooms[rid]) startMatch(rid);
         }, 5000);
     }
 
-    // ── Socket İşlemleri ────────────────────────────────────
     io.on('connection', (socket) => {
         let rid = null;
         let username = null;
@@ -148,7 +125,6 @@ module.exports = function(io) {
             const r=rooms[rid]; if(!r||!r.players[socket.id]||r.phase!=='playing') return;
             const p=r.players[socket.id];
             p.x=data.x; p.y=data.y; p.z=data.z; p.rotY=data.rotY;
-            r.lastActive=Date.now();
             socket.to(rid).volatile.emit('playerMoved',{id:socket.id,x:data.x,y:data.y,z:data.z,rotY:data.rotY});
         });
 
@@ -167,9 +143,7 @@ module.exports = function(io) {
             target.health-=weapon.damage;
             
             if(target.health<=0){
-                target.health=100;
-                target.deaths++;
-                shooter.kills++;
+                target.health=100; target.deaths++; shooter.kills++;
                 r.teamKills[shooter.team]=(r.teamKills[shooter.team]||0)+1;
                 
                 const map=MAPS[r.currentMap]; const half=(map.sizeX||map.size)/2-2;
@@ -217,7 +191,6 @@ module.exports = function(io) {
         }
     });
 
-    // ── Boş Odaları Temizleme Rutini ─────────────────────────
     setInterval(()=>{
         const now=Date.now();
         Object.keys(rooms).forEach(id=>{
@@ -229,13 +202,7 @@ module.exports = function(io) {
         });
     },15000);
 
-    // 15 dakikalık arka plan görev kaydı
     setInterval(() => {
-        try {
-            saveAccounts();
-            console.log("💾 Otomatik arka plan hesap kaydı yapıldı.");
-        } catch (error) {
-            console.error("Kayıt hatası:", error);
-        }
+        try { saveAccounts(); } catch (error) { console.error("Kayıt hatası:", error); }
     }, 15 * 60 * 1000);
 };
