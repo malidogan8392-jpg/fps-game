@@ -1,31 +1,42 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 
-// Yüksek oyuncu sayısında gecikmeyi (ping) düşürmek için optimize edilmiş Socket ayarları
+// Eğer HTML dosyaların sunucu dizindeyse onları yayınlar
+app.use(express.static(__dirname));
+
+app.get('/', (req, res) => {
+    // index.html varsa onu gönderir, yoksa hata vermez
+    try {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    } catch (e) {
+        res.status(404).send('Oyun istemci dosyası bulunamadı. Lütfen HTML dosyanızı açarak bağlanın.');
+    }
+});
+
+// Optimize edilmiş soket ayarları (CORS dışarıdan gelen HTML bağlantılarına izin verir)
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "*", // Dışarıdaki tüm HTML dosyalarının bağlanmasına izin verir
         methods: ["GET", "POST"]
     },
-    // Performans ve Ağ Optimizasyonları
-    pingTimeout: 30000,   // Bağlantısı zayıf oyuncuların hemen düşmesini engeller
-    pingInterval: 10000,  // Her 10 saniyede bir bağlantıyı check eder
-    perMessageDeflate: false // CPU yükünü azaltmak için socket düzeyinde ekstra sıkıştırmayı kapatır
+    pingTimeout: 30000,   
+    pingInterval: 10000,  
+    perMessageDeflate: false 
 });
 
-// Sunucunun beklenmedik anlık hatalarla çökmesini tamamen engeller
+// Çökme koruması
 process.on('uncaughtException', (err) => {
-    console.error('❌ Kritik Hata (Sunucu Koruması Aktif):', err.message);
+    console.error('❌ Kritik Hata:', err.message);
 });
 process.on('unhandledRejection', (err) => {
-    console.error('❌ Promise Hatası (Sunucu Koruması Aktif):', err.message);
+    console.error('❌ Promise Hatası:', err.message);
 });
 
-// Port tanımı (Platformlarla tam uyumlu)
 const PORT = process.env.PORT || 7860;
 server.listen(PORT, () => {
     console.log('====================================');
@@ -34,10 +45,9 @@ server.listen(PORT, () => {
     console.log('====================================');
 });
 
-// Oyun motorunu (server.js) bağla
 try {
     require('./server.js')(io);
-    console.log('✅ Oyun motoru ve 10 dakikalık maç döngüsü optimize şekilde bağlandı.');
+    console.log('✅ Oyun motoru başarıyla bağlandı.');
 } catch (error) {
     console.error('❌ Oyun motoru yüklenirken hata oluştu:', error.message);
 }
