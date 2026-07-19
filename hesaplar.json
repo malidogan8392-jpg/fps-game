@@ -24,5 +24,18 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "test1": {
+    "username": "test1",
+    "passwordHash": "c31d032b36ebdb897c0c1a2d7b873f9c41434d264d65656f7b3b70128ebf6898",
+    "createdAt": 1784475550725,
+    "lastLogin": 1784475550725,
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
