@@ -1,1 +1,12 @@
-{}
+{
+  "ali": {
+    "pwdHash": "849904500c0c50167ee997d5353e2380bedd7c1f11450b507e5f0b24870e278a",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
+  }
+}
