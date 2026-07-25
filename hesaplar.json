@@ -1,4 +1,14 @@
 {
+  "123": {
+    "pwdHash": "4d811b8d1b1a79f710250dcf9695db3c0c51bdf44f559ddce5291acb8fc216ec",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
+  },
   "ali": {
     "username": "ali",
     "passwordHash": "6062fa84a7627fb69d464fd4cf3212b3ab6f3a327f8aa42ee3e0d61bfb6a3041",
