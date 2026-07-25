@@ -1514,7 +1514,7 @@ document.addEventListener('visibilitychange',()=>{
 });
 let inGame=false, lastRoomId=null, wasConnected=false, silentReauth=false, lastRejoinAt=0;
 function initSocket(){
-  socket=io({reconnection:true,reconnectionDelay:1500,reconnectionDelayMax:8000,reconnectionAttempts:Infinity});
+socket=createP2PSocket();
   socket.on('connect',()=>{
     hideReconnectMsg();
     if(wasConnected){
