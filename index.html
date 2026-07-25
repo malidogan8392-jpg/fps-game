@@ -1599,6 +1599,7 @@ document.addEventListener('visibilitychange',()=>{
 let inGame=false, lastRoomId=null, wasConnected=false, silentReauth=false, lastRejoinAt=0;
 function initSocket(){
   socket=createP2PSocket();
+ window.socket=socket;
   socket.on('connect',()=>{
     hideReconnectMsg();
     if(wasConnected){
