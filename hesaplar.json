@@ -21,5 +21,15 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "alaad": {
+    "pwdHash": "5b88bd53ecfbc275f6b6b4e1192ae5a09a9c8b19e9b19c14c039d262d2f87a33",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
