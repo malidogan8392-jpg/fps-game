@@ -383,7 +383,9 @@ setInterval(krktrUpdateReadout,300);
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js" onerror="console.error('❌ fflate.min.js CDN\'den yüklenemedi')"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js" onerror="console.error('❌ FBXLoader.js CDN\'den yüklenemedi')" onload="console.log('✅ FBXLoader.js script yüklendi')"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js" onerror="console.error('❌ SkeletonUtils.js CDN\'den yüklenemedi')" onload="console.log('✅ SkeletonUtils.js script yüklendi, THREE.SkeletonUtils:',typeof THREE!=='undefined'&&!!THREE.SkeletonUtils)"></script>
-<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="net/game-engine.js"></script>
+<script src="net/p2p-net.js"></script>
 <script>
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
