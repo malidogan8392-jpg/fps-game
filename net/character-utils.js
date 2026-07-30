@@ -2,6 +2,7 @@
 // Utility functions for attaching weapons to rigged FBX/GLTF characters
 // and a lightweight "ragdoll" fallback (no external physics engine required).
 // - attachWeaponToBone(characterRoot, weaponMesh, boneName, posOffset, rotOffset)
+// - autoAttachWeapon(characterRoot, weaponMesh, hintNames)
 // - enableRagdollSimple(characterRoot, options)
 // This file is safe to load after three.js and the project's other scripts.
 
@@ -21,9 +22,16 @@
     return found;
   }
 
+  function findBoneByKeyword(root, keyword){
+    keyword = (keyword||'').toLowerCase();
+    let found = null;
+    root.traverse((o)=>{ if(found) return; if(o.isBone && o.name && o.name.toLowerCase().includes(keyword)) found = o; });
+    return found;
+  }
+
   function attachWeaponToBone(characterRoot, weapon, boneName, posOffset, rotOffset){
     if(!characterRoot || !weapon) return null;
-    const bone = findBoneByName(characterRoot, boneName);
+    const bone = findBoneByName(characterRoot, boneName) || findBoneByKeyword(characterRoot, boneName);
     if(!bone){
       console.warn('attachWeaponToBone: bone not found:', boneName);
       return null;
@@ -35,21 +43,49 @@
 
     // move weapon under grip and reset local transform
     // keep world scale/rotation by using world matrices
-    const oldParent = weapon.parent || null;
+    weapon.updateMatrixWorld(true);
     const worldPos = new THREE.Vector3();
     const worldQuat = new THREE.Quaternion();
     const worldScale = new THREE.Vector3();
-    weapon.updateMatrixWorld(true);
     weapon.matrixWorld.decompose(worldPos, worldQuat, worldScale);
 
     grip.add(weapon);
-    weapon.position.copy(posOffset || new THREE.Vector3(0,0,0));
-    if(rotOffset) weapon.rotation.set(rotOffset.x||0, rotOffset.y||0, rotOffset.z||0);
+    if(posOffset && posOffset.isVector3){ weapon.position.copy(posOffset); }
+    else if(posOffset && typeof posOffset === 'object'){ weapon.position.set(posOffset.x||0,posOffset.y||0,posOffset.z||0); }
+    else weapon.position.set(0,0,0);
+
+    if(rotOffset && typeof rotOffset === 'object'){ weapon.rotation.set(rotOffset.x||0, rotOffset.y||0, rotOffset.z||0); }
+
+    // preserve scale if weapon had worldScale
     weapon.scale.copy(worldScale);
 
     weapon.userData._attachedGrip = grip;
     weapon.userData._attachedToBone = boneName;
+    console.log('attachWeaponToBone: attached', weapon.name||weapon.uuid, 'to bone', bone.name);
     return grip;
+  }
+
+  // Try common bone name candidates and attach automatically
+  function autoAttachWeapon(characterRoot, weapon, hints){
+    hints = hints || [];
+    // common right-hand bone name candidates (expand as needed)
+    const COMMON = ['RightHand','RightHandMiddle','righthand','Right_Wrist','hand_r','Hand_R','RightArm','rightforearm','RightForeArm','RightUpArm','RightFinger','hand.r'];
+    const searchList = Array.from(new Set([].concat(hints||[]).concat(COMMON)));
+    // first try exact match
+    for(const name of searchList){
+      const b = findBoneByName(characterRoot, name);
+      if(b){ return attachWeaponToBone(characterRoot, weapon, name); }
+    }
+    // then try keyword contains
+    for(const name of searchList){
+      const b = findBoneByKeyword(characterRoot, name);
+      if(b){ return attachWeaponToBone(characterRoot, weapon, name); }
+    }
+    // fallback: try to find any bone with 'hand' in name
+    const anyHand = findBoneByKeyword(characterRoot, 'hand');
+    if(anyHand) return attachWeaponToBone(characterRoot, weapon, anyHand.name);
+    console.warn('autoAttachWeapon: no suitable bone found');
+    return null;
   }
 
   // Lightweight ragdoll: create simple meshes at important bone positions and simulate them
@@ -119,17 +155,20 @@
     const dropped = [];
     characterRoot.traverse((o)=>{
       if(o.userData && o.userData._attachedGrip){
-        // weapon is likely child of grip
-        const weapon = o;
-        // compute world transform
-        const pos = new THREE.Vector3(); const quat = new THREE.Quaternion(); const sc = new THREE.Vector3();
-        weapon.updateMatrixWorld(true);
-        weapon.matrixWorld.decompose(pos, quat, sc);
-        scene.add(weapon);
-        weapon.position.copy(pos);
-        weapon.quaternion.copy(quat);
-        weapon.scale.copy(sc);
-        dropped.push(weapon);
+        const weaponGrip = o.userData._attachedGrip;
+        // weapon likely child of grip
+        weaponGrip.traverse((c)=>{ if(c.isMesh || c.isGroup) {
+            // detach meshes/groups under grip
+            // compute world transform
+            c.updateMatrixWorld(true);
+            const pos = new THREE.Vector3(); const quat = new THREE.Quaternion(); const sc = new THREE.Vector3();
+            c.matrixWorld.decompose(pos, quat, sc);
+            scene.add(c);
+            c.position.copy(pos);
+            c.quaternion.copy(quat);
+            c.scale.copy(sc);
+            dropped.push(c);
+        }});
       }
     });
 
@@ -175,7 +214,7 @@
         m.rotateX(ang.x * dt);
         m.rotateY(ang.y * dt);
         m.rotateZ(ang.z * dt);
-        // slowly sink into ground (simple floor collision)
+        // simple floor collision
         if(m.position.y < 0.05){ m.position.y = 0.05; v.y *= -0.25; v.x *= 0.6; v.z *= 0.6; }
       });
       r.drops.forEach((w)=>{
@@ -191,11 +230,10 @@
       if(age > r.life){
         // cleanup
         r.meshes.forEach(m=>{ try{ m.parent && m.parent.remove(m); }catch(e){} });
-        // leave dropped weapons as they are (optionally you can remove after a timeout)
         window._simpleRagdolls.splice(i,1);
       } else if(age > r.fadeStart){
         const f = 1 - (age - r.fadeStart)/(r.life - r.fadeStart);
-        r.meshes.forEach(m=>{ if(m.material) m.material.opacity = f; m.material.transparent = true; });
+        r.meshes.forEach(m=>{ if(m.material) { m.material.opacity = f; m.material.transparent = true; } });
       }
     }
     requestAnimationFrame(_ragdollTick);
@@ -204,6 +242,7 @@
 
   // Expose to global
   window.attachWeaponToBone = attachWeaponToBone;
+  window.autoAttachWeapon = autoAttachWeapon;
   window.enableRagdollSimple = enableRagdollSimple;
 
   // Monkeypatch P2PSocket._fire to auto-ragdoll on 'playerDied' events when available
@@ -222,11 +261,26 @@
               if(data && data.killerId && window.players && window.players[data.killerId]){
                 const k = window.players[data.killerId];
                 if(k && k.x !== undefined){
-                  // direction from hit to victim
-                  const hitPos = new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z);
+                  // direction from killer to victim
+                  const victimPos = new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z);
                   const killerPos = new THREE.Vector3(k.x||0, k.y||0, k.z||0);
-                  forceVec = hitPos.sub(killerPos).normalize().multiplyScalar(5);
-                  forceVec.y = 6;
+                  const dir = new THREE.Vector3().subVectors(victimPos, killerPos).normalize().multiplyScalar(5);
+                  dir.y = 6;
+                  forceVec = dir;
+                }
+              }
+              // if weapon attached, try to detach gracefully
+              if(mesh.userData && mesh.userData.gun){
+                const gun = mesh.userData.gun;
+                // make sure gun is world-aligned before ragdoll so it can drop
+                gun.updateMatrixWorld(true);
+                // detach from grip if any
+                if(gun.userData && gun.userData._attachedGrip){
+                  const grip = gun.userData._attachedGrip;
+                  try{ grip.remove(gun); }catch(e){}
+                  window.scene.add(gun);
+                  gun.position.copy(new THREE.Vector3().setFromMatrixPosition(gun.matrixWorld));
+                  gun.quaternion.copy(new THREE.Quaternion().setFromRotationMatrix(gun.matrixWorld));
                 }
               }
               window.enableRagdollSimple(mesh, { force: forceVec, life: 6 });
