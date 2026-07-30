@@ -272,15 +272,18 @@ window.createP2PSocket = createP2PSocket;
 window.startHosting = startHosting;
 window.becomeClientJoin = (code) => becomeClient(_mainSocket, code);
 
-// --- dynamic loader: if character-utils.js exists, load it automatically so the helper functions are available
-(function(){
-  try{
-    const url = 'net/character-utils.js';
-    const s = document.createElement('script');
-    s.src = url;
-    s.async = true;
-    s.onload = ()=>console.log('✅ character-utils loaded');
-    s.onerror = ()=>console.warn('⚠️ character-utils failed to load:', url);
-    document.head.appendChild(s);
-  }catch(e){console.warn('character-utils loader error',e);} 
-})();
+// Auto-load character-utils (if not already present) so attach/ragdoll helpers are available
+if (typeof window !== 'undefined') {
+  function _loadCharacterUtils(){
+    if (window.attachWeaponToBone && window.enableRagdollSimple) return;
+    try{
+      const s = document.createElement('script');
+      s.src = 'net/character-utils.js';
+      s.onload = function(){ console.log('character-utils loaded'); };
+      s.onerror = function(){ console.warn('character-utils failed to load'); };
+      (document.head || document.documentElement).appendChild(s);
+    }catch(e){ console.warn('failed to inject character-utils', e); }
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(_loadCharacterUtils, 300);
+  else document.addEventListener('DOMContentLoaded', _loadCharacterUtils);
+}
