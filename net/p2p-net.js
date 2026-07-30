@@ -271,3 +271,16 @@ function startHosting(mode, name) { becomeHost(_mainSocket, mode, name); }
 window.createP2PSocket = createP2PSocket;
 window.startHosting = startHosting;
 window.becomeClientJoin = (code) => becomeClient(_mainSocket, code);
+
+// --- dynamic loader: if character-utils.js exists, load it automatically so the helper functions are available
+(function(){
+  try{
+    const url = 'net/character-utils.js';
+    const s = document.createElement('script');
+    s.src = url;
+    s.async = true;
+    s.onload = ()=>console.log('✅ character-utils loaded');
+    s.onerror = ()=>console.warn('⚠️ character-utils failed to load:', url);
+    document.head.appendChild(s);
+  }catch(e){console.warn('character-utils loader error',e);} 
+})();
