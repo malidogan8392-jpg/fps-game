@@ -1130,7 +1130,7 @@ function buildMap(mapData){
       const s=mapData.model.scale||1;
       wrap.scale.set(s,s,s);
       wrap.rotation.y=mapData.model.rotY||0;
-      wrap.position.y=mapData.model.offsetY||0;
+      wrap.position.set(mapData.model.offsetX||0, mapData.model.offsetY||0, mapData.model.offsetZ||0);
       scene.add(wrap);
       mapObjects.push(wrap);
     });
