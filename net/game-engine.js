@@ -161,7 +161,7 @@ function createRoomEngine(io, opts) {
             const sp = getSpawn(r.currentMap, target.team);
             target.x = sp.x; target.z = sp.z; target.grenades = 1; target.smokes = 1;
 
-            io.to(RID).emit('playerDied', { deadId: targetId, killerId: shooterId });
+            io.to(RID).emit('playerDied', { deadId: targetId, killerId: shooterId, x: sp.x, z: sp.z });
             io.to(RID).emit('teamKills', r.teamKills);
             io.to(RID).emit('scoreUpdate', { id: targetId, kills: target.kills, deaths: target.deaths });
             io.to(RID).emit('scoreUpdate', { id: shooterId, kills: shooter.kills, deaths: shooter.deaths, killPoints: shooter.killPoints });

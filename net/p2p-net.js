@@ -220,6 +220,11 @@ function becomeHost(s, mode, name) {
             conn.on('close', () => io._removeSocket(conn.peer));
         });
 
+        // Host'un sinyal sunucusuyla bağlantısı (WebRTC değil, sadece "telefon rehberi" kısmı)
+        // geçici olarak koparsa, halihazırda bağlı oyuncular etkilenmez ama yeni oyuncular
+        // katılamaz — bu yüzden otomatik olarak toparlamayı dene.
+        peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
+
         // Hub'a kendini kaydet (heartbeat)
         const heartbeat = () => {
             hubFetch('/api/servers/heartbeat', {
@@ -242,32 +247,66 @@ function becomeHost(s, mode, name) {
     peer.on('error', (err) => { console.error('PeerJS host hatası:', err); _mainSocket._fire('gameErr', 'Sunucu açılamadı: ' + err.type); });
 }
 
-function becomeClient(s, hostPeerId) {
+const RECONNECT_MAX_TRIES = 4, RECONNECT_BASE_DELAY_MS = 1000;
+
+function becomeClient(s, hostPeerId, _reconnectState) {
     hostPeerId = String(hostPeerId || '').trim().toUpperCase();
     if (!hostPeerId) return;
-    const peer = new Peer({ debug: 0 });
+    // _reconnectState taşınır ki peer/tries reset olmadan denemeler sayılabilsin
+    const rs = _reconnectState || { tries: 0, peer: null };
+    const peer = rs.peer || new Peer({ debug: 0 });
+    rs.peer = peer;
+
+    function scheduleReconnect(reason) {
+        if (rs.tries >= RECONNECT_MAX_TRIES) {
+            s.connected = false; s._fire('disconnect');
+            _mainSocket._fire('gameErr', 'Sunucuyla bağlantı koptu (' + reason + '), yeniden bağlanılamadı. Sayfayı yenile.');
+            return;
+        }
+        rs.tries++;
+        const delay = RECONNECT_BASE_DELAY_MS * rs.tries;
+        _mainSocket._fire('gameErr', 'Bağlantı koptu, yeniden bağlanılıyor... (' + rs.tries + '/' + RECONNECT_MAX_TRIES + ')');
+        setTimeout(() => {
+            // PeerJS'in kendi sinyal sunucusu bağlantısı da kopmuş olabilir, önce onu toparla
+            if (peer.disconnected && !peer.destroyed) peer.reconnect();
+            const conn = peer.connect(hostPeerId, { reliable: true });
+            attachConnHandlers(conn, true);
+        }, delay);
+    }
+
+    function attachConnHandlers(conn, isReconnect) {
+        conn.on('open', () => {
+            rs.tries = 0; // başarılı bağlantı: sayaç sıfırlanır
+            s._mode = 'client'; s.id = peer.id; s.connected = true; s._conn = conn;
+            conn.send({ event: 'helloJoin', data: { username: myUsername, killPoints: myProgress.killPoints, unlockedWeapons: myProgress.unlockedWeapons, unlockedChars: myProgress.unlockedChars } });
+            if (isReconnect) _mainSocket._fire('gameErr', 'Yeniden bağlandı ✅'); else s._fire('connect');
+            const pingInt = setInterval(() => { if (conn.open) conn.send({ event: '_ping', data: null }); else clearInterval(pingInt); }, 5000);
+        });
+        conn.on('data', (msg) => s._fire(msg.event, msg.data));
+        conn.on('close', () => { s.connected = false; scheduleReconnect('bağlantı kapandı'); });
+        conn.on('error', (err) => { console.error('PeerJS bağlantı hatası:', err); scheduleReconnect(err.type || 'hata'); });
+    }
 
     peer.on('open', (myId) => {
         const conn = peer.connect(hostPeerId, { reliable: true });
-        conn.on('open', () => {
-            s._mode = 'client'; s.id = myId; s.connected = true; s._conn = conn;
-            conn.send({ event: 'helloJoin', data: { username: myUsername, killPoints: myProgress.killPoints, unlockedWeapons: myProgress.unlockedWeapons, unlockedChars: myProgress.unlockedChars } });
-            s._fire('connect');
-            setInterval(() => { if (conn.open) conn.send({ event: '_ping', data: null }); }, 5000);
-        });
-        conn.on('data', (msg) => s._fire(msg.event, msg.data));
-        conn.on('close', () => { s.connected = false; s._fire('disconnect'); });
-        conn.on('error', (err) => { console.error('PeerJS bağlantı hatası:', err); _mainSocket._fire('gameErr', 'Sunucuya bağlanılamadı'); });
+        attachConnHandlers(conn, false);
     });
+    peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
     peer.on('error', (err) => {
         console.error('PeerJS client hatası:', err);
-        _mainSocket._fire('gameErr', err.type === 'peer-unavailable' ? 'Sunucu bulunamadı ya da kapalı' : ('Bağlantı hatası: ' + err.type));
+        if (err.type === 'peer-unavailable' && rs.tries < RECONNECT_MAX_TRIES && s.connected !== false) {
+            // host henüz hazır olmayabilir ya da geçici bir kopukluk olabilir
+            scheduleReconnect('sunucu bulunamadı');
+        } else {
+            _mainSocket._fire('gameErr', err.type === 'peer-unavailable' ? 'Sunucu bulunamadı ya da kapalı' : ('Bağlantı hatası: ' + err.type));
+        }
     });
 }
 
 // Menüden "Sunucu Aç" butonuna basıldığında çağrılır (bkz. index.html lobi kodu)
 function startHosting(mode, name) { becomeHost(_mainSocket, mode, name); }
 
+window.P2PSocket = P2PSocket;
 window.createP2PSocket = createP2PSocket;
 window.startHosting = startHosting;
 window.becomeClientJoin = (code) => becomeClient(_mainSocket, code);

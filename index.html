@@ -881,7 +881,10 @@ function tryUpgradeHuman(group){
       // Henüz bulunmayan takım/karakter için null bırakılır (T-pose'da kalır, panelle bulunabilir).
       const TEAM_ARM_POSE={
         blue:{ rightArm:{x:0.44,y:6.04,z:-1.46} },
-        red:null
+        // red'in kendi kesinleşmiş pozu henüz bulunmadı; T-pose'da bırakmak yerine
+        // mavininkiyle aynı tahmini deniyoruz (rig farklı dosyadan geldiği için tam
+        // oturmayabilir — window.KRKTR_TUNE.rightArm.rotation ile canlı ince ayar yapılabilir)
+        red:{ rightArm:{x:0.44,y:6.04,z:-1.46} }
       };
       const fixedPose=TEAM_ARM_POSE[team];
       let rArmReady=null,lArmReady=null;
@@ -1727,7 +1730,16 @@ function initSocket(){
     spawnBullet(new THREE.Vector3(d.ox,d.oy,d.oz),new THREE.Vector3(d.dx,d.dy,d.dz),false);
   });
   socket.on('playerDied',(d)=>{
-    if(d.deadId===myId){health=100;updateHealth(100);showOv('msg-killed',2000);grenadeCount=1;smokeCount=1;updateThrowHUD();}
+    if(players[d.deadId]&&d.x!=null){players[d.deadId].x=d.x;players[d.deadId].z=d.z;}
+    if(d.deadId===myId){
+      health=100;updateHealth(100);showOv('msg-killed',2000);grenadeCount=1;smokeCount=1;updateThrowHUD();
+      if(d.x!=null&&camera) camera.position.set(d.x,1.7,d.z);
+    } else if(playerMeshes[d.deadId]&&d.x!=null){
+      // anında ışınla (lerp yaparsak harita boyunca kayıyormuş gibi görünür)
+      playerMeshes[d.deadId].position.set(d.x,0,d.z);
+      playerMeshes[d.deadId].userData.targetX=d.x;
+      playerMeshes[d.deadId].userData.targetZ=d.z;
+    }
     if(d.killerId===myId)showOv('msg-kill',1500);
     updateScoreboard();
   });
