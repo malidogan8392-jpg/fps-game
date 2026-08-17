@@ -897,22 +897,22 @@ function tryUpgradeHuman(group){
         action.setLoop(THREE.LoopOnce);
         action.clampWhenFinished=true;
         group.userData.dyingAction=action;
-      },true);
+      });
 
       function restRot(b){ return b?{x:b.rotation.x,y:b.rotation.y,z:b.rotation.z}:null; }
       const lLeg=findBone(clone,'leftupleg'), rLeg=findBone(clone,'rightupleg');
       const lArm=findBone(clone,'leftarm'), rArm=findBone(clone,'rightarm');
       const lForeArm=findBone(clone,'leftforearm'), rForeArm=findBone(clone,'rightforearm');
       const hand=findBone(clone,'righthand');
+      const hips=findBone(clone,'hips');
+      group.userData.hipsBone=hips;
+      group.userData.hipsRestY=hips?hips.position.y:0;
 
       // Panelden canlı denenip bulunan, karakter bazında kesinleşmiş kol pozları.
       // Henüz bulunmayan takım/karakter için null bırakılır (T-pose'da kalır, panelle bulunabilir).
       const TEAM_ARM_POSE={
-        blue:{ rightArm:{x:0.44,y:6.04,z:-1.46} },
-        // red'in kendi kesinleşmiş pozu henüz bulunmadı; T-pose'da bırakmak yerine
-        // mavininkiyle aynı tahmini deniyoruz (rig farklı dosyadan geldiği için tam
-        // oturmayabilir — window.KRKTR_TUNE.rightArm.rotation ile canlı ince ayar yapılabilir)
-        red:{ rightArm:{x:0.44,y:6.04,z:-1.46} }
+        blue:{ rightArm:{x:0.66,y:-0.95,z:-0.89} },
+        red:{ rightArm:{x:0.66,y:-0.95,z:-0.89} }
       };
       const fixedPose=TEAM_ARM_POSE[team];
       let rArmReady=null,lArmReady=null;
@@ -931,7 +931,7 @@ function tryUpgradeHuman(group){
       const compensate=1/(clone.scale.x||1);
       gun.scale.setScalar(compensate*0.6);
       if(hand){ hand.add(gun); } else { group.add(gun); }
-      gun.position.set(0,0,0); gun.rotation.set(0,0,0);
+      gun.position.set(0.03,0.09,0.03); gun.rotation.set(1.60,0.20,5.00);
 
       group.userData.walkBones={
         leftUpLeg:{bone:lLeg,rest:restRot(lLeg)}, rightUpLeg:{bone:rLeg,rest:restRot(rLeg)}
@@ -1479,6 +1479,15 @@ function animate(){
       if(wb.leftUpLeg.bone&&wb.leftUpLeg.rest) wb.leftUpLeg.bone.rotation.x=wb.leftUpLeg.rest.x+s;
       if(wb.rightUpLeg.bone&&wb.rightUpLeg.rest) wb.rightUpLeg.bone.rotation.x=wb.rightUpLeg.rest.x-s;
     }
+    // Ölüm: dying klibinin kendi .position verisi iki farklı rig'in ham ölçeği tutmadığı için
+    // güvenilmez (havada asılı kalma sorunu buradan geliyordu) — bu yüzden SADECE dönüşü
+    // klipten alıyoruz, kalçayı yere indirme işini burada elle (rig'den bağımsız, her zaman
+    // doğru) yapıyoruz.
+    if(mesh.userData.isDead&&mesh.userData.hipsBone){
+      const t=Math.min(1,(performance.now()-mesh.userData.deathStartTime)/900);
+      const ease=1-Math.pow(1-t,3);
+      mesh.userData.hipsBone.position.y=mesh.userData.hipsRestY*(1-ease*0.85);
+    }
   });
   if(camera){camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;}
   if(fpGun){
@@ -1742,6 +1751,7 @@ function initSocket(){
       const dying=mesh.userData.dyingAction, idle=mesh.userData.idleAction;
       if(mesh.userData.isDead&&dying&&idle){
         switchCharAnim(mesh,idle,0.2);
+        if(mesh.userData.hipsBone) mesh.userData.hipsBone.position.y=mesh.userData.hipsRestY;
       }
       mesh.userData.isDead=false;
     }
@@ -1784,6 +1794,7 @@ function initSocket(){
       mesh.userData.targetZ=d.z;
       if(mesh.userData.dyingAction&&mesh.userData.idleAction){
         mesh.userData.isDead=true;
+        mesh.userData.deathStartTime=performance.now();
         switchCharAnim(mesh,mesh.userData.dyingAction,0.1);
       }
     }
