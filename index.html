@@ -730,30 +730,32 @@ function loadCharacterFBX(team,cb){
   },undefined,err=>{console.error('❌ '+team+' karakter FBX yüklenemedi:',err);charCbs[team].forEach(c=>c(null));charCbs[team]=[];});
 }
 let animClips={}, animLoading={}, animCbs={};
-function stripIncompatibleTracks(clip){
+function stripIncompatibleTracks(clip,keepPosition){
   // Bu animasyon dosyaları bazen yüz ifadesi (morph target / blend shape) track'i içeriyor;
   // bizim karakter modellerimizde böyle bir mesh yok, bu yüzden bu track'leri atıyoruz
   // (atmazsak her karede "wasn't found" uyarısı spam'liyor, işlevsel bir zararı yoksa da gereksiz).
-  // AYRICA: animasyon farklı bir iskeletten (farklı kemik uzunlukları/farklı ham ölçek) geldiği
-  // için TÜM .position track'lerini atıyoruz (Hips dahil) — yoksa kaynak iskeletin ham konum
-  // değerleri bizim iskeletimize uygulanınca karakter ya çizgiye büzülüyor ya da devasa şişiyor.
-  // Sonuç: kalça zıplama/yükselme animasyonu kaybolur ama şekil bozulmaz (sadece dönüşler kalır).
+  // AYRICA: idle/ateş gibi yerinde sayan animasyonlarda .position track'lerini (Hips dahil) atıyoruz
+  // — farklı iskeletten geldiği için ham konum değerleri bizim iskeletimize uygulanınca karakter
+  // ya çizgiye büzülüyor ya da devasa şişiyor. AMA "dying" gibi yere düşme/çökme içeren
+  // animasyonlarda Hips pozisyonu ATILIRSA karakter yere düşmez, kalça sabit (ayakta duruş)
+  // yüksekliğinde havada asılı kalıp öylece dönüyor — o yüzden keepPosition=true ile çağrıldığında
+  // pozisyon track'leri korunuyor (kök obje zaten doğru boya ölçeklenmiş olduğu için orantı sorunu olmamalı).
   const tracks=clip.tracks.filter(t=>{
     if(t.name.includes('morphTargetInfluences')) return false;
-    if(t.name.endsWith('.position')) return false;
+    if(!keepPosition&&t.name.endsWith('.position')) return false;
     return true;
   });
-  console.log('[KRKTR] track filtre sonrası:',tracks.length,'/',clip.tracks.length);
+  console.log('[KRKTR] track filtre sonrası:',tracks.length,'/',clip.tracks.length,'(keepPosition='+!!keepPosition+')');
   return new THREE.AnimationClip(clip.name,clip.duration,tracks);
 }
-function loadAnimClip(category,cb){
+function loadAnimClip(category,cb,keepPosition){
   if(animClips[category]!==undefined){cb(animClips[category]);return;}
   (animCbs[category]=animCbs[category]||[]).push(cb);
   if(animLoading[category]||!fbxLoader){if(!fbxLoader)cb(null);return;}
   animLoading[category]=true;
   fbxLoader.load(ANIM_FILES[category],obj=>{
     let clip=(obj.animations&&obj.animations[0])||null;
-    if(clip) clip=stripIncompatibleTracks(clip);
+    if(clip) clip=stripIncompatibleTracks(clip,keepPosition);
     animClips[category]=clip;
     console.log(clip?('✅ animasyon yüklendi: '+category+' ('+clip.tracks.length+' track)'):('❌ '+category+' içinde animasyon yok'));
     (animCbs[category]||[]).forEach(c=>c(clip));animCbs[category]=[];
@@ -895,7 +897,7 @@ function tryUpgradeHuman(group){
         action.setLoop(THREE.LoopOnce);
         action.clampWhenFinished=true;
         group.userData.dyingAction=action;
-      });
+      },true);
 
       function restRot(b){ return b?{x:b.rotation.x,y:b.rotation.y,z:b.rotation.z}:null; }
       const lLeg=findBone(clone,'leftupleg'), rLeg=findBone(clone,'rightupleg');
@@ -1469,7 +1471,7 @@ function animate(){
     }
     // Idle/Walk: hazır animasyon yerine kendi iskeletinin dinlenme pozuna göre hafif sallanma
     const wb=mesh.userData.walkBones;
-    if(wb){
+    if(wb&&!mesh.userData.isDead){
       const moving=mesh.userData.lastMoveTime&&(performance.now()-mesh.userData.lastMoveTime)<250;
       mesh.userData.walkPhase=(mesh.userData.walkPhase||0)+dt*(moving?7:1.6);
       const amp=moving?0.9:0.12; // yürürken belirgin sallanma, dururken hafif nefes alma
