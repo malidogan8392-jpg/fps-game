@@ -872,11 +872,10 @@ function tryUpgradeHuman(group){
       const mixer=new THREE.AnimationMixer(clone);
       group.userData.mixer=mixer;
       activeMixers.push(mixer);
-      // Mixamo'dan alınan, takıma özel "silah kaldırıp nişan alma" duruşu (idle) — artık
-      // elle ayarlanmış tek-kol pozu yerine tam vücut animasyonu kullanılıyor.
-      // stripIncompatibleTracks TÜM .position track'lerini attığı için (bkz. yukarısı)
-      // farklı iskelet oranlarından kaynaklı çarpılma riski düşük.
-      loadAnimClip(team+'_idle',clip=>{
+      // Kırmızının KENDİ idle/ateş klibi kendi rig'inde çarpılıyordu (eller garip kenetleniyordu) —
+      // o yüzden iki takım için de MAVİNİN animasyon dosyalarını kullanıyoruz (kırmızının rig'i
+      // muhtemelen mavinin klibiyle daha uyumlu retarget oluyor).
+      loadAnimClip('blue_idle',clip=>{
         if(!clip||group.userData.removed) return;
         const action=mixer.clipAction(clip);
         action.play();
@@ -884,7 +883,7 @@ function tryUpgradeHuman(group){
         group.userData._activeAction=action;
       });
       // Ateş ve ölüm klipleri önceden yükleniyor, ihtiyaç anında (atış/ölüm event'i) crossfade ile devreye giriyor.
-      loadAnimClip(team+'_fire',clip=>{
+      loadAnimClip('blue_fire',clip=>{
         if(!clip||group.userData.removed) return;
         const action=mixer.clipAction(clip);
         action.setLoop(THREE.LoopOnce);
@@ -1749,11 +1748,15 @@ function initSocket(){
       mesh.rotation.y=d.rotY;
       mesh.userData.lastMoveTime=performance.now();
       const dying=mesh.userData.dyingAction, idle=mesh.userData.idleAction;
-      if(mesh.userData.isDead&&dying&&idle){
+      // Oyuncu öldükten hemen sonra bile client hareket paketi göndermeye devam edebiliyor
+      // (gerçek bir "ölüm kilidi" yok) — bu yüzden ölüm animasyonunun en az bir süre
+      // görünmesine izin veriyoruz, aksi halde animasyon başlar başlamaz iptal oluyordu.
+      const deathShownLongEnough=(performance.now()-(mesh.userData.deathStartTime||0))>1200;
+      if(mesh.userData.isDead&&dying&&idle&&deathShownLongEnough){
         switchCharAnim(mesh,idle,0.2);
         if(mesh.userData.hipsBone) mesh.userData.hipsBone.position.y=mesh.userData.hipsRestY;
+        mesh.userData.isDead=false;
       }
-      mesh.userData.isDead=false;
     }
   });
   socket.on('itemThrown',(d)=>{
