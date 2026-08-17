@@ -702,7 +702,10 @@ function autoScaleToHeight(obj,targetHeight){
 }
 const ANIM_FILES={
   pistol_light:'public/anim_pistol_light.fbx', pistol_medium:'public/anim_pistol_medium.fbx', pistol_heavy:'public/anim_pistol_heavy.fbx',
-  rifle_light:'public/anim_rifle_light.fbx',   rifle_medium:'public/anim_rifle_medium.fbx',   rifle_heavy:'public/anim_rifle_heavy.fbx'
+  rifle_light:'public/anim_rifle_light.fbx',   rifle_medium:'public/anim_rifle_medium.fbx',   rifle_heavy:'public/anim_rifle_heavy.fbx',
+  blue_idle:'public/anim/blue_idle.fbx', blue_fire:'public/anim/blue_fire.fbx',
+  red_idle:'public/anim/red_idle.fbx',   red_fire:'public/anim/red_fire.fbx',
+  dying:'public/anim/dying.fbx'
 };
 const WEAPON_ANIM_CATEGORY={
   uzi:'pistol_light', glock:'pistol_medium', deagle:'pistol_heavy',
@@ -760,6 +763,13 @@ function findBone(root,keyword){
   let found=null;
   root.traverse(o=>{ if(!found&&o.isBone&&o.name.toLowerCase().includes(keyword)) found=o; });
   return found;
+}
+function switchCharAnim(mesh,toAction,duration){
+  if(!toAction) return;
+  const from=mesh.userData._activeAction;
+  if(from&&from!==toAction) from.fadeOut(duration);
+  toAction.reset().setEffectiveWeight(1).fadeIn(duration).play();
+  mesh.userData._activeAction=toAction;
 }
 const WEAPON_NODE_MAP={
   glock:'glock', deagle:'desert eagle',
@@ -860,16 +870,32 @@ function tryUpgradeHuman(group){
       const mixer=new THREE.AnimationMixer(clone);
       group.userData.mixer=mixer;
       activeMixers.push(mixer);
-      // GEÇİCİ OLARAK KAPALI: hazır Mixamo animasyonu bizim özel karakterlerin kemik
-      // oranlarıyla uyuşmadığı için vücudu çarpıtıyor (bkz. sohbet geçmişi). T-pose'da
-      // ölçek/konum kanıtlanmış şekilde doğru olduğu için şimdilik animasyonsuz bırakıyoruz.
-      // Tekrar açmak için aşağıdaki loadAnimClip bloğunun yorumunu kaldırman yeterli.
-      // loadAnimClip(category,clip=>{
-      //   if(!clip||group.userData.removed) return;
-      //   const action=mixer.clipAction(clip);
-      //   action.play();
-      //   group.userData.animAction=action;
-      // });
+      // Mixamo'dan alınan, takıma özel "silah kaldırıp nişan alma" duruşu (idle) — artık
+      // elle ayarlanmış tek-kol pozu yerine tam vücut animasyonu kullanılıyor.
+      // stripIncompatibleTracks TÜM .position track'lerini attığı için (bkz. yukarısı)
+      // farklı iskelet oranlarından kaynaklı çarpılma riski düşük.
+      loadAnimClip(team+'_idle',clip=>{
+        if(!clip||group.userData.removed) return;
+        const action=mixer.clipAction(clip);
+        action.play();
+        group.userData.idleAction=action;
+        group.userData._activeAction=action;
+      });
+      // Ateş ve ölüm klipleri önceden yükleniyor, ihtiyaç anında (atış/ölüm event'i) crossfade ile devreye giriyor.
+      loadAnimClip(team+'_fire',clip=>{
+        if(!clip||group.userData.removed) return;
+        const action=mixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce);
+        action.clampWhenFinished=true;
+        group.userData.fireAction=action;
+      });
+      loadAnimClip('dying',clip=>{
+        if(!clip||group.userData.removed) return;
+        const action=mixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce);
+        action.clampWhenFinished=true;
+        group.userData.dyingAction=action;
+      });
 
       function restRot(b){ return b?{x:b.rotation.x,y:b.rotation.y,z:b.rotation.z}:null; }
       const lLeg=findBone(clone,'leftupleg'), rLeg=findBone(clone,'rightupleg');
@@ -906,8 +932,9 @@ function tryUpgradeHuman(group){
       gun.position.set(0,0,0); gun.rotation.set(0,0,0);
 
       group.userData.walkBones={
-        leftUpLeg:{bone:lLeg,rest:restRot(lLeg)}, rightUpLeg:{bone:rLeg,rest:restRot(rLeg)},
-        leftArm:{bone:lArm,rest:lArmReady}, rightArm:{bone:rArm,rest:rArmReady}
+        leftUpLeg:{bone:lLeg,rest:restRot(lLeg)}, rightUpLeg:{bone:rLeg,rest:restRot(rLeg)}
+        // Kollar artık walkBones'ta değil — Mixamo idle/fire animasyonu (mixer) kollara tam
+        // hakim, prosedürel sallanma ile üst üste binip yarışmasın diye buradan çıkarıldı.
       };
       // CANLI AYAR İÇİN: window.KRKTR_TUNE ile kemikleri/silahı panelden ya da konsoldan oynatabilirsin.
       window.KRKTR_TUNE={ leftArm:lArm, rightArm:rArm, leftForeArm:lForeArm, rightForeArm:rForeArm, gun };
@@ -1449,8 +1476,6 @@ function animate(){
       const s=Math.sin(mesh.userData.walkPhase)*amp;
       if(wb.leftUpLeg.bone&&wb.leftUpLeg.rest) wb.leftUpLeg.bone.rotation.x=wb.leftUpLeg.rest.x+s;
       if(wb.rightUpLeg.bone&&wb.rightUpLeg.rest) wb.rightUpLeg.bone.rotation.x=wb.rightUpLeg.rest.x-s;
-      if(wb.leftArm.bone&&wb.leftArm.rest) wb.leftArm.bone.rotation.x=wb.leftArm.rest.x-s*0.6;
-      if(wb.rightArm.bone&&wb.rightArm.rest) wb.rightArm.bone.rotation.x=wb.rightArm.rest.x+s*0.6;
     }
   });
   if(camera){camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;}
@@ -1707,10 +1732,16 @@ function initSocket(){
   socket.on('playerMoved',(d)=>{
     if(players[d.id]) Object.assign(players[d.id],d);
     if(playerMeshes[d.id]){
-      playerMeshes[d.id].userData.targetX=d.x;
-      playerMeshes[d.id].userData.targetZ=d.z;
-      playerMeshes[d.id].rotation.y=d.rotY;
-      playerMeshes[d.id].userData.lastMoveTime=performance.now();
+      const mesh=playerMeshes[d.id];
+      mesh.userData.targetX=d.x;
+      mesh.userData.targetZ=d.z;
+      mesh.rotation.y=d.rotY;
+      mesh.userData.lastMoveTime=performance.now();
+      const dying=mesh.userData.dyingAction, idle=mesh.userData.idleAction;
+      if(mesh.userData.isDead&&dying&&idle){
+        switchCharAnim(mesh,idle,0.2);
+      }
+      mesh.userData.isDead=false;
     }
   });
   socket.on('itemThrown',(d)=>{
@@ -1728,6 +1759,15 @@ function initSocket(){
   });
   socket.on('bulletFired',(d)=>{
     spawnBullet(new THREE.Vector3(d.ox,d.oy,d.oz),new THREE.Vector3(d.dx,d.dy,d.dz),false);
+    const mesh=playerMeshes[d.id];
+    if(mesh&&mesh.userData.fireAction&&mesh.userData.idleAction){
+      switchCharAnim(mesh,mesh.userData.fireAction,0.05);
+      clearTimeout(mesh.userData._fireBackTimer);
+      mesh.userData._fireBackTimer=setTimeout(()=>{
+        if(mesh.userData.removed||mesh.userData.isDead) return;
+        switchCharAnim(mesh,mesh.userData.idleAction,0.15);
+      },Math.max(120,(mesh.userData.fireAction.getClip().duration*1000)-100));
+    }
   });
   socket.on('playerDied',(d)=>{
     if(players[d.deadId]&&d.x!=null){players[d.deadId].x=d.x;players[d.deadId].z=d.z;}
@@ -1736,9 +1776,14 @@ function initSocket(){
       if(d.x!=null&&camera) camera.position.set(d.x,1.7,d.z);
     } else if(playerMeshes[d.deadId]&&d.x!=null){
       // anında ışınla (lerp yaparsak harita boyunca kayıyormuş gibi görünür)
-      playerMeshes[d.deadId].position.set(d.x,0,d.z);
-      playerMeshes[d.deadId].userData.targetX=d.x;
-      playerMeshes[d.deadId].userData.targetZ=d.z;
+      const mesh=playerMeshes[d.deadId];
+      mesh.position.set(d.x,0,d.z);
+      mesh.userData.targetX=d.x;
+      mesh.userData.targetZ=d.z;
+      if(mesh.userData.dyingAction&&mesh.userData.idleAction){
+        mesh.userData.isDead=true;
+        switchCharAnim(mesh,mesh.userData.dyingAction,0.1);
+      }
     }
     if(d.killerId===myId)showOv('msg-kill',1500);
     updateScoreboard();
