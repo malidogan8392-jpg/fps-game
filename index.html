@@ -904,8 +904,16 @@ function tryUpgradeHuman(group){
       const lForeArm=findBone(clone,'leftforearm'), rForeArm=findBone(clone,'rightforearm');
       const hand=findBone(clone,'righthand');
       const hips=findBone(clone,'hips');
-      group.userData.hipsBone=hips;
-      group.userData.hipsRestY=hips?hips.position.y:0;
+      // Tek bir kemiği (Hips) manipüle etmek güvenilmez çıktı (rig'e göre davranışı
+      // öngörülemiyor, karakter havada asılı kalmaya devam etti) — bunun yerine ölüm
+      // anında TÜM grubu (mesh) aşağı kaydıracağız, bu hangi rig/animasyon olursa olsun
+      // her zaman çalışır. Kalçanın yerden gerçek dünya yüksekliğini burada ölçüyoruz.
+      let hipsDrop=CHAR_TARGET_HEIGHT*0.5;
+      if(hips){
+        const wp=new THREE.Vector3(); hips.getWorldPosition(wp);
+        hipsDrop=group.worldToLocal(wp.clone()).y;
+      }
+      group.userData.hipsDropAmount=hipsDrop;
 
       // Panelden canlı denenip bulunan, karakter bazında kesinleşmiş kol pozları.
       // Henüz bulunmayan takım/karakter için null bırakılır (T-pose'da kalır, panelle bulunabilir).
@@ -1478,14 +1486,15 @@ function animate(){
       if(wb.leftUpLeg.bone&&wb.leftUpLeg.rest) wb.leftUpLeg.bone.rotation.x=wb.leftUpLeg.rest.x+s;
       if(wb.rightUpLeg.bone&&wb.rightUpLeg.rest) wb.rightUpLeg.bone.rotation.x=wb.rightUpLeg.rest.x-s;
     }
-    // Ölüm: dying klibinin kendi .position verisi iki farklı rig'in ham ölçeği tutmadığı için
-    // güvenilmez (havada asılı kalma sorunu buradan geliyordu) — bu yüzden SADECE dönüşü
-    // klipten alıyoruz, kalçayı yere indirme işini burada elle (rig'den bağımsız, her zaman
-    // doğru) yapıyoruz.
-    if(mesh.userData.isDead&&mesh.userData.hipsBone){
+    // Ölüm: dying klibi sadece DÖNÜŞ veriyor (pozisyon track'i iki farklı rig'in ham
+    // ölçeğiyle uyumsuz olduğu için güvenilmez, havada asılı kalmaya sebep oluyordu).
+    // Karakteri yere "düşürme" işini burada, tüm grubu (mesh) aşağı kaydırarak elle
+    // yapıyoruz — hangi kemik/rig olursa olsun her zaman doğru çalışır.
+    if(mesh.userData.isDead){
       const t=Math.min(1,(performance.now()-mesh.userData.deathStartTime)/900);
       const ease=1-Math.pow(1-t,3);
-      mesh.userData.hipsBone.position.y=mesh.userData.hipsRestY*(1-ease*0.85);
+      const drop=(mesh.userData.hipsDropAmount!=null?mesh.userData.hipsDropAmount:0.95);
+      mesh.position.y=-drop*0.82*ease;
     }
   });
   if(camera){camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;}
@@ -1752,9 +1761,9 @@ function initSocket(){
       // (gerçek bir "ölüm kilidi" yok) — bu yüzden ölüm animasyonunun en az bir süre
       // görünmesine izin veriyoruz, aksi halde animasyon başlar başlamaz iptal oluyordu.
       const deathShownLongEnough=(performance.now()-(mesh.userData.deathStartTime||0))>1200;
-      if(mesh.userData.isDead&&dying&&idle&&deathShownLongEnough){
-        switchCharAnim(mesh,idle,0.2);
-        if(mesh.userData.hipsBone) mesh.userData.hipsBone.position.y=mesh.userData.hipsRestY;
+      if(mesh.userData.isDead&&deathShownLongEnough){
+        if(dying&&idle) switchCharAnim(mesh,idle,0.2);
+        mesh.position.y=0;
         mesh.userData.isDead=false;
       }
     }
