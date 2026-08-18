@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <!-- FPS SAYACI -->
+<!-- FPS SAYACI (Sağ Üst Köşe) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', () => {
     const stats = new Stats();
     stats.showPanel(0);
+    // Sol üst köşe dolu olduğu için sağ üste taşıyoruz:
+    stats.dom.style.left = 'unset';
+    stats.dom.style.right = '10px';
+    stats.dom.style.top = '10px';
     document.body.appendChild(stats.dom);
 
     function loop() {
-      stats.update();
+      stats.begin();
+      stats.end();
       requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
