@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+  <!-- FPS SAYACI -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const stats = new Stats();
+    stats.showPanel(0);
+    document.body.appendChild(stats.dom);
+
+    function loop() {
+      stats.update();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  });
+</script>
 <link rel="icon" type="image/png" href="icon-192.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
