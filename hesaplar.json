@@ -38,5 +38,15 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "soba borusu": {
+    "pwdHash": "43a239892a5a52853c54a40e0abf6e94d03694ab84cdf4b217983789e37e9da8",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
