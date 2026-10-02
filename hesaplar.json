@@ -48,5 +48,15 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "realsebastian28": {
+    "pwdHash": "0286711f9528412bb3b46743426e48461e49ab03470decd04235d0e376660df3",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
