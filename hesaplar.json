@@ -58,5 +58,15 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "adsdaf": {
+    "pwdHash": "4d811b8d1b1a79f710250dcf9695db3c0c51bdf44f559ddce5291acb8fc216ec",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
