@@ -68,5 +68,15 @@
     "unlockedChars": [
       "soldier"
     ]
+  },
+  "seyit": {
+    "pwdHash": "12d61ef8a00f140c9020aa284187fc0bb20d2ff34ee7c19e3361554cc70cb62b",
+    "killPoints": 0,
+    "unlockedWeapons": [
+      "glock"
+    ],
+    "unlockedChars": [
+      "soldier"
+    ]
   }
 }
